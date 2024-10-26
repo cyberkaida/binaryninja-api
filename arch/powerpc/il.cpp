@@ -717,27 +717,6 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 	//	il.AddInstruction(ei2);
 	//	break;
 
-		// TODO: high level IL is sometimes assuming incorrect variables, and setting floating points to
-		// 	standard registers.
-		// TODO: high level IL is accidentilly adding an extra subtract operand and assigning it to no one.
-		// TODO: final assignment for the fcmp is whether or not the sub is 0, not greater than 0.
-		case PPC_INS_FCMPU:
-			REQUIRE3OPS
-			ei0 = il.FloatSub(4, operToIL(il, oper1), operToIL(il, oper2), crxToFlagWriteType(oper0->reg));
-			il.AddInstruction(ei0);
-			break;
-
-		case PPC_INS_BN_FCMPO:
-			REQUIRE3OPS
-			ei0 = il.FloatSub(4, operToIL(il, oper1), operToIL(il, oper2), crxToFlagWriteType(oper0->reg));
-			il.AddInstruction(ei0);
-			break;
-
-		case PPC_INS_FMR:
-			REQUIRE2OPS
-			il.AddInstruction(il.SetRegister(4, oper0->reg, operToIL(il, oper1)));
-			break;
-
 		case PPC_INS_CRAND:
 		case PPC_INS_CRANDC:
 		case PPC_INS_CRNAND:
@@ -1713,6 +1692,38 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 			il.AddInstruction(il.Trap(0));
 			break;
 
+// =====================================
+// =====FLOATING POINT INSTRUCTIONS=====
+// =====================================
+		// case PPC_INS_FCMPO: /* compare (signed) word(32-bit) */
+		// 	REQUIRE2OPS
+		// 	ei0 = operToIL(il, oper2 ? oper1 : oper0);
+		// 	ei1 = operToIL(il, oper2 ? oper2 : oper1);
+		// 	ei2 = il.Sub(4, ei0, ei1, crxToFlagWriteType(oper2 ? oper0->reg : PPC_REG_CR0));
+		// 	il.AddInstruction(ei2);
+		// 	break;
+
+		// TODO: high level IL is sometimes assuming incorrect variables, and setting floating points to
+		// 	standard registers.
+		// TODO: high level IL is accidentilly adding an extra subtract operand and assigning it to no one.
+		// TODO: final assignment for the fcmp is whether or not the sub is 0, not greater than 0.
+		case PPC_INS_FCMPU:
+			REQUIRE3OPS
+			ei0 = il.FloatSub(4, operToIL(il, oper1), operToIL(il, oper2), crxToFlagWriteType(oper0->reg));
+			il.AddInstruction(ei0);
+			break;
+
+		case PPC_INS_BN_FCMPO:
+			REQUIRE3OPS
+			ei0 = il.FloatSub(4, operToIL(il, oper1), operToIL(il, oper2), crxToFlagWriteType(oper0->reg));
+			il.AddInstruction(ei0);
+			break;
+
+		case PPC_INS_FMR:
+			REQUIRE2OPS
+			il.AddInstruction(il.SetRegister(4, oper0->reg, operToIL(il, oper1)));
+			break;
+
 		case PPC_INS_STFS:
 			REQUIRE2OPS
 			ei0 = il.Store(4,
@@ -1720,7 +1731,6 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 				operToIL(il, oper0)
 			);
 			il.AddInstruction(ei0);
-
 			break;
 
 		case PPC_INS_STFD:
@@ -1730,7 +1740,6 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 				operToIL(il, oper0)
 			);
 			il.AddInstruction(ei0);
-
 			break;
 
 		case PPC_INS_LFS:
@@ -1739,7 +1748,6 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 			ei0 = il.Load(4, ei0);                    // [d(rA)]
 			ei0 = il.SetRegister(4, oper0->reg, ei0); // rD = [d(rA)]
 			il.AddInstruction(ei0);
-
 			break;
 
 		case PPC_INS_LFD:
@@ -1748,17 +1756,11 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 			ei0 = il.Load(8, ei0);                    // [d(rA)]
 			ei0 = il.SetRegister(8, oper0->reg, ei0); // rD = [d(rA)]
 			il.AddInstruction(ei0);
-
 			break;
 
-		// case PPC_INS_FCMPO: /* compare (signed) word(32-bit) */
-		// 	REQUIRE2OPS
-		// 	ei0 = operToIL(il, oper2 ? oper1 : oper0);
-		// 	ei1 = operToIL(il, oper2 ? oper2 : oper1);
-		// 	ei2 = il.Sub(4, ei0, ei1, crxToFlagWriteType(oper2 ? oper0->reg : PPC_REG_CR0));
-		// 	il.AddInstruction(ei2);
-		// 	break;
-
+// =====================================
+// =====TO BE DEFINED INSTRUCTIONS======
+// =====================================
 
 		case PPC_INS_BCL:
 		case PPC_INS_BCLR:
