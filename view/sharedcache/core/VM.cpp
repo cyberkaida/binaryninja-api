@@ -78,8 +78,17 @@ std::string ResolveFilePath(BinaryNinja::Ref<BinaryNinja::BinaryView> dscView, c
 	std::string cleanPath = path;
 	cleanPath.replace(cleanPath.find(projectFilePathOnDisk), projectFilePathOnDisk.size(), dscProjectFile->GetName());
 
-	std::filesystem::path filePath(cleanPath);
-	std::string fileName = filePath.filename();
+	// Find the last occurrence of a slash or backslash in the path
+	size_t lastSlashPos = cleanPath.find_last_of("/\\");
+	std::string fileName;
+
+	// If found, extract the substring after the last slash as the filename
+	if (lastSlashPos != std::string::npos) {
+		fileName = cleanPath.substr(lastSlashPos + 1);
+	} else {
+		// If no slash is found, the entire path is considered the filename
+		fileName = cleanPath;
+	}
 
 	auto project = dscProjectFile->GetProject();
 	auto dscProjectFolder = dscProjectFile->GetFolder();
