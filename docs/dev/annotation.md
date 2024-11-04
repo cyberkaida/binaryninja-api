@@ -6,7 +6,7 @@ This document is organized into five sections describing how to work with variou
 1. [Types](#types) documents creating and interacting with types through the API
 1. [Tags](#tags) describes how to create tags and bookmarks
 1. [Type Libraries](typelibraries.md) explains how to work with Type Libraries, including multiple sources of information from which Binary Ninja can automatically source for type information from and how you can add to them
-1. [Signature Libraries](#signature-library) explains how to work with the signature library which match statically compiled functions which are then matched with type libraries
+1. [Signature Libraries](#signature-library) explains how to work with the WARP signature libraries which identify known functions within a binary
 
 ## Symbols
 
@@ -489,48 +489,51 @@ Type Library documentation has outgrown this section and now lives [in a separat
 
 ## Signature Library
 
-While many signatures are [built-in](https://github.com/Vector35/binaryninja-api/issues/1551) and require no interaction to automatically match functions, you may wish to add or modify your own. First, install the [SigKit](https://github.com/Vector35/sigkit/) plugin from the [plugin manager](../guide/plugins.md#plugin-manager).
+:alert: If you are looking for documentation on SigKit signature libraries look here, however consider switching to WARP compatible signatures.
 
-### Running the signature matcher
+### Configuration
 
-The signature matcher runs automatically by default once analysis completes. You can turn this off in `Settings > Analysis > Autorun Function Signature Matcher` (or, [analysis.signatureMatcher.autorun](../guide/settings.md#analysis.signatureMatcher.autorun) in Settings).
+Binary Ninja by default will use WARP functions to identify matching functions within the binary, to disable this there are a few options:
 
-You can also trigger the signature matcher to run from the menu `Tools > Run Analysis Module > Signature Matcher`.
+- **WARP GUID** (`analysis.warp.guid`): make the function GUID required for **WARP Matcher** to run on the function, enabled by default.
+- **WARP Matcher** (`analysis.warp.matcher`): match and apply known functions, enabled by default.
 
-Once the signature matcher runs, it will print a brief report to the console detailing how many functions it matched and will rename matched functions. For example:
+These two settings are complimentary, for **WARP Matcher** to actually start matching known functions there first must be a set of functions with WARP GUID's attached.
+The primary way to create this set of GUID's is to have **WARP GUID** enabled.
 
-``` text
-1 functions matched total, 0 name-only matches, 0 thunks resolved, 33 functions skipped because they were too small
-```
+### Consumer Usage
 
-### Generating signature libraries
+**WARP** function matching will occur automatically whenever you first open a binary, this process runs at the end of analysis and will trigger reanalysis on matched functions.
 
-To generate a signature library for the currently-open binary, use `Tools > Signature Library > Generate Signature Library`. This will generate signatures for all functions in the binary that have a name attached to them. Note that functions with automatically-chosen names such as `sub_401000` will be skipped. Once it's generated, you'll be prompted where to save the resulting signature library.
+### Producer Usage
 
-For headless users, you can generate signature libraries by using the sigkit API ([examples](https://github.com/Vector35/sigkit/tree/master/examples) and [documentation](https://github.com/Vector35/sigkit/blob/master/__init__.py#L46)). For more detailed information, see our blog post describing [signature generation](https://binary.ninja/2020/03/11/signature-libraries.html#signature-generation).
+Before you create signatures you must first identify the binary for which you want to produce said signatures for and whether that format is directly supported by Binary Ninja.
 
-If you are accessing the sigkit API through the Binary Ninja GUI and you've installed the sigkit plugin through the plugin manager, you will need to import sigkit under a different name:
+#### Producing Directly in Binary Ninja
 
-``` python
-import Vector35_sigkit as sigkit
-```
+If you have a binary that can be opened within Binary Ninja then the process is straightforward:
 
-### Installing signature libraries
+1. Open the binary in Binary Ninja
+2. Run `WARP\\Generate Signature File`
 
-Binary Ninja loads signature libraries from 2 locations:
+Once step 2 completes it will ask for a file name, then it will store the signature file in your user signatures folder (see [Signature Files](#signature-files)).
 
- - [$INSTALL_DIR](https://docs.binary.ninja/guide/#binary-path)/signatures/$PLATFORM
- - [$USER_DIR](https://docs.binary.ninja/guide/#user-folder)/signatures/$PLATFORM
+#### Producing Headlessly with Binary Ninja
+
+If what you are trying to do requires anything more than a single binary (i.e. static library archives) than you will need to use a headless script.
+
+Currently, the only script that exists is `sigem`, which is what is used internally for creation of shipped signature files. The source code and more instructions can be found [here](https://github.com/Vector35/binaryninja-api/tree/dev/plugins/warp).
+
+### Signature Files
+
+The signature files are simple flatbuffers, if you intend on consuming them directly (without Binary Ninja), please visit the open source repository [here](https://github.com/Vector35/warp)!
+
+The signatures that are applied can come from two places: one in the [install directory](https://docs.binary.ninja/guide/#binary-folder) under `signatures` and one in the [user directory](https://docs.binary.ninja/guide/#user-folder) under `signatures`.
+
+- [Install Directory](https://docs.binary.ninja/guide/#binary-folder)/signatures/{PLATFORM}
+- [User Directory](https://docs.binary.ninja/guide/#user-folder)/signatures/{PLATFORM}
 
 ???+ Danger "Warning"
-    Always place your signature libraries in your user directory. The install path is wiped whenever Binary Ninja auto-updates. You can locate it with `Open Plugin Folder` in the command palette and navigate "up" a directory.
+Always place your signature libraries in your user directory. The install path is wiped whenever Binary Ninja auto-updates. You can locate it with `Open Plugin Folder` in the command palette and navigate "up" a directory.
 
 Inside the signatures folder, each platform has its own folder for its set of signatures. For example, `windows-x86_64` and `linux-ppc32` are two sample platforms. When the signature matcher runs, it uses the signature libraries that are relevant to the current binary's platform. (You can check the platform of any binary you have open in the UI using the console and typing `bv.platform`)
-
-#### Manipulating signature libraries
-
-You can edit signature libraries programmatically using the sigkit API. A very basic [example](https://github.com/Vector35/sigkit/blob/master/examples/convert_siglib.py) shows how to load and save signature libraries. Note that Binary Ninja only supports signatures in the `.sig` format; the other formats are for debugging. The easiest way to load and save signature libraries in this format are the [`sigkit.load_signature_library()`](https://github.com/Vector35/sigkit/blob/master/__init__.py) and [`sigkit.save_signature_library()`](https://github.com/Vector35/sigkit/blob/master/__init__.py) functions.
-
-To help debug and optimize your signature libraries in a Signature Explorer GUI by using `Tools > Signature Library > Explore Signature Library`. This GUI can be opened through the sigkit API using [`sigkit.signature_explorer()`](https://github.com/Vector35/sigkit/blob/master/__init__.py) and [`sigkit.explore_signature_library()`](https://github.com/Vector35/sigkit/blob/master/sigkit/sigexplorer.py).
-
-For a text-based approach, you can also export your signature libraries to JSON using the Signature Explorer. Then, you can edit them in a text editor and convert them back to a .sig using the Signature Explorer afterwards. Of course, these conversions are also accessible through the API as the [`sigkit.sig_serialize_json`](https://github.com/Vector35/sigkit/blob/master/sigkit/sig_serialize_json.py) module, which provides a pickle-like interface. Likewise, [`sigkit.sig_serialize_fb`](https://github.com/Vector35/sigkit/blob/master/sigkit/sig_serialize_fb.py) provides serialization for the standard .sig format.
