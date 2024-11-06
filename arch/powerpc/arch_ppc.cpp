@@ -998,9 +998,9 @@ class PowerpcArchitecture: public Architecture
 			case IL_FLAG_GT_7: return "cr7gt";
 			case IL_FLAG_EQ_7: return "cr7eq";
 			case IL_FLAG_SO_7: return "cr7so";
-			case IL_FLAG_XER_SO: return "xerso";
-			case IL_FLAG_XER_OV: return "xerov";
-			case IL_FLAG_XER_CA: return "xerca";
+			case IL_FLAG_XER_SO: return "xer_so";
+			case IL_FLAG_XER_OV: return "xer_ov";
+			case IL_FLAG_XER_CA: return "xer_ca";
 			default:
 				// LogWarn("Unknown flag: %#x/%d", flag, flag);
 				return "ERR_FLAG_NAME";
