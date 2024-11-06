@@ -34,6 +34,7 @@ class BINARYNINJAUIAPI TagListModel : public QAbstractItemModel, public BinaryNi
 	std::map<int, QSize> m_sectionSizeHints;
 	std::map<std::string, uint64_t> m_count;
 	DisassemblySettingsRef m_settings;
+	mutable std::mutex m_countLock;
 
   private:
 	void AddDisassemblyTokens(QList<QVariant>& line, std::vector<BinaryNinja::InstructionTextToken> tokens) const;
