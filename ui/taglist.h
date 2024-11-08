@@ -85,6 +85,7 @@ public:
 	virtual void sort(int column, Qt::SortOrder order) override;
 
 	void backgroundSort(int column, Qt::SortOrder order, TagStorage& tagStorage, TagTypeStorage& tagTypeStorage, TagTypeIndices& tagTypeIndices);
+	void refresh();
 
 Q_SIGNALS:
 	void notifyUpdateComplete(bool complete);
