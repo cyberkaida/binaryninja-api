@@ -7,10 +7,12 @@ using namespace BinaryNinja;
 static Ref<BackgroundTask> rttiBackgroundTask = nullptr;
 static Ref<BackgroundTask> vftBackgroundTask = nullptr;
 
+
 bool MetadataExists(Ref<BinaryView> view)
 {
 	return view->QueryMetadata(VIEW_METADATA_MSVC) != nullptr;
 }
+
 
 void RTTIAnalysis(Ref<AnalysisContext> analysisContext)
 {
@@ -22,24 +24,22 @@ void RTTIAnalysis(Ref<AnalysisContext> analysisContext)
 	// We currently only want to check for MSVC rtti on windows platforms
 	if (platformName.find("window") == std::string::npos)
 		return;
-	rttiBackgroundTask = new BackgroundTask("Scanning for RTTI...", false);
 	auto processor = MicrosoftRTTIProcessor(view);
 	processor.ProcessRTTI();
 	view->StoreMetadata(VIEW_METADATA_MSVC, processor.SerializedMetadata(), true);
-	rttiBackgroundTask->Finish();
 }
+
 
 void VFTAnalysis(Ref<AnalysisContext> analysisContext)
 {
 	auto view = analysisContext->GetBinaryView();
 	if (!MetadataExists(view))
 		return;
-	vftBackgroundTask = new BackgroundTask("Scanning for VFTs...", false);
 	auto processor = MicrosoftRTTIProcessor(view);
 	processor.ProcessVFT();
 	view->StoreMetadata(VIEW_METADATA_MSVC, processor.SerializedMetadata(), true);
-	vftBackgroundTask->Finish();
 }
+
 
 extern "C" {
 	BN_DECLARE_CORE_ABI_VERSION

@@ -3,9 +3,9 @@ use binaryninja::binaryview::{BinaryView, BinaryViewExt};
 use binaryninja::command::Command;
 use std::time::Instant;
 
-pub struct LoadTypesCommand;
+pub struct LoadTypes;
 
-impl Command for LoadTypesCommand {
+impl Command for LoadTypes {
     fn action(&self, view: &BinaryView) {
         let Some(file) = binaryninja::interaction::get_open_filename_input(
             "Apply Signature File Types",
@@ -23,7 +23,7 @@ impl Command for LoadTypesCommand {
             log::error!("Could not get data from signature file: {:?}", file);
             return;
         };
-        
+
         let Some(arch) = view.default_arch() else {
             log::error!("Could not get default architecture");
             return;

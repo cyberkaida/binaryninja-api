@@ -342,7 +342,7 @@ class Workflow(metaclass=_WorkflowMetaclass):
 
 		:param Activity activity: the Activity to register
 		:param list[str] subactivities: the list of Activities to assign
-		:return: True on Success, False otherwise
+		:return: the registered Activity
 		:rtype: Activity
 		"""
 		if activity is None:
@@ -350,7 +350,10 @@ class Workflow(metaclass=_WorkflowMetaclass):
 		input_list = (ctypes.c_char_p * len(subactivities))()
 		for i in range(0, len(subactivities)):
 			input_list[i] = str(subactivities[i]).encode('charmap')
-		return core.BNWorkflowRegisterActivity(self.handle, activity.handle, input_list, len(subactivities))
+		handle = core.BNWorkflowRegisterActivity(self.handle, activity.handle, input_list, len(subactivities))
+		if handle is None:
+			return None
+		return activity
 
 	def contains(self, activity: ActivityType) -> bool:
 		"""
@@ -707,6 +710,13 @@ class WorkflowMachine:
 
 	def override_set(self, activity, enable):
 		request = json.dumps({"command": "override", "action": "set", "activity": activity, "enable": enable})
+		if self.is_function_machine:
+			return json.loads(core.BNPostWorkflowRequestForFunction(self.handle, request))
+		else:
+			return json.loads(core.BNPostWorkflowRequestForBinaryView(self.handle, request))
+
+	def delay(self, duration):
+		request = json.dumps({"command": "delay", "duration": duration})
 		if self.is_function_machine:
 			return json.loads(core.BNPostWorkflowRequestForFunction(self.handle, request))
 		else:

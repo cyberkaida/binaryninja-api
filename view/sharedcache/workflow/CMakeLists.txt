@@ -4,11 +4,33 @@ project(sharedcacheworkflow)
 file(GLOB SOURCES *.cpp *.h)
 add_library(sharedcacheworkflow OBJECT ${SOURCES})
 
-if (VIEW_NAME)
-    target_compile_definitions(sharedcacheworkflow PRIVATE VIEW_NAME="${VIEW_NAME}")
-else()
-    error("VIEW_NAME must be defined")
+set(COMPILE_DEFS "")
+
+if (HARD_FAIL_MODE)
+    set(COMPILE_DEFS "${COMPILE_DEFS} ABORT_FAILURES")
 endif()
+
+if (BN_REF_COUNT_DEBUG)
+    set(COMPILE_DEFS "${COMPILE_DEFS} BN_REF_COUNT_DEBUG;")
+endif()
+
+if (SLIDEINFO_DEBUG_TAGS)
+    set(COMPILE_DEFS "${COMPILE_DEFS} SLIDEINFO_DEBUG_TAGS;")
+endif()
+
+if (METADATA_VERSION)
+    set(COMPILE_DEFS "${COMPILE_DEFS} METADATA_VERSION=${METADATA_VERSION};")
+else()
+    message(FATAL_ERROR "No metadata version provided. Fatal.")
+endif()
+
+if (VIEW_NAME)
+    set(COMPILE_DEFS "${COMPILE_DEFS} VIEW_NAME=\"${VIEW_NAME}\"")
+else()
+    message(FATAL_ERROR "No view name provided. Fatal.")
+endif()
+
+target_compile_definitions(sharedcacheworkflow PRIVATE ${COMPILE_DEFS})
 
 
 function(get_recursive_include_dirs target result)
@@ -37,6 +59,8 @@ function(get_recursive_include_dirs target result)
     # Set the result to the collected include directories
     set(${result} ${include_dirs} PARENT_SCOPE)
 endfunction()
+
+message(STATUS "RCD: ${BN_REF_COUNT_DEBUG}")
 
 get_recursive_include_dirs(binaryninjaapi INCLUDES)
 

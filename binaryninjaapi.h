@@ -6488,6 +6488,44 @@ namespace BinaryNinja {
 		*/
 		MemoryMap* GetMemoryMap() { return m_memoryMap.get(); }
 
+		/*! Begin a bulk segment addition operation.
+
+			This function prepares the `BinaryView` for bulk addition of both auto and user-defined segments.
+			During the bulk operation, segments can be added using `AddAutoSegment`, `AddAutoSegments`,
+			`AddUserSegment`, or `AddUserSegments` without immediately triggering the MemoryMap update process.
+			The queued segments will not take effect until `EndBulkAddSegments` is called.
+
+			\sa EndBulkAddSegments
+			\sa CancelBulkAddSegments
+		*/
+		void BeginBulkAddSegments();
+
+		/*! Finalize and apply all queued segments (auto and user) added during a bulk segment addition operation.
+
+			This function commits all segments that were queued since the last call to `BeginBulkAddSegments`.
+			The MemoryMap update process is executed at this point, applying all changes in one batch for
+			improved performance.
+
+			\note This function must be called after `BeginBulkAddSegments` to apply the queued segments.
+
+			\sa BeginBulkAddSegments
+			\sa CancelBulkAddSegments
+		*/
+		void EndBulkAddSegments();
+
+		/*! Cancel a bulk segment addition operation.
+
+			This function discards all auto and user segments that were queued since the last call to
+			`BeginBulkAddSegments` without applying them. It allows you to abandon the changes in case
+			they are no longer needed.
+
+			\note If no bulk operation is in progress, calling this function has no effect.
+
+			\sa BeginBulkAddSegments
+			\sa EndBulkAddSegments
+		*/
+		void CancelBulkAddSegments();
+
 		/*! Add an analysis segment that specifies how data from the raw file is mapped into a virtual address space
 
 			Note that the segment added may have different size attributes than requested
@@ -6526,6 +6564,12 @@ namespace BinaryNinja {
 			\param flags Segment r/w/x flags
 		*/
 		void AddUserSegment(uint64_t start, uint64_t length, uint64_t dataOffset, uint64_t dataLength, uint32_t flags);
+
+		/*! Creates user-defined segments that specify how data from the raw file is mapped into a virtual address space
+
+			\param segments Segments to add to the BinaryView
+		*/
+		void AddUserSegments(const std::vector<BNSegmentInfo>& segments);
 
 		/*! Removes a user-defined segment from th current segment mapping
 
@@ -13623,9 +13667,8 @@ namespace BinaryNinja {
 		std::vector<DisassemblyTextLine> GetExprText(
 		    ExprId expr, bool asFullAst = true, DisassemblySettings* settings = nullptr);
 		std::vector<DisassemblyTextLine> GetExprText(
-		    const HighLevelILInstruction& instr, bool asFullAst = true, DisassemblySettings* settings = nullptr);
-		std::vector<DisassemblyTextLine> GetInstructionText(
-		    size_t i, bool asFullAst = true, DisassemblySettings* settings = nullptr);
+			const HighLevelILInstruction& instr, DisassemblySettings* settings = nullptr);
+		std::vector<DisassemblyTextLine> GetInstructionText(size_t i, DisassemblySettings* settings = nullptr);
 
 		Confidence<Ref<Type>> GetExprType(size_t expr);
 		Confidence<Ref<Type>> GetExprType(const HighLevelILInstruction& expr);
@@ -13671,25 +13714,22 @@ namespace BinaryNinja {
 
 		    \param instr The instruction to emit lines for.
 		    \param settings The settings for disassembly (optional).
-		    \param asFullAst Whether to emit full AST or single expressions.
 		    \param precedence The current operator precedence level.
 		    \param statement Whether the instruction is a statement or an expression.
 		    \return A list of lines of tokens for the instruction.
 		*/
 		std::vector<DisassemblyTextLine> GetExprText(const HighLevelILInstruction& instr, DisassemblySettings* settings,
-			bool asFullAst = true, BNOperatorPrecedence precedence = TopLevelOperatorPrecedence,
-			bool statement = false);
+			BNOperatorPrecedence precedence = TopLevelOperatorPrecedence, bool statement = false);
 
 		/*! Generates lines for the given High Level IL instruction in the style of the linear view. To get the lines
 		    for the entire function, pass the root instruction of a HighLevelILFunction.
 
 		    \param instr The instruction to emit lines for.
 		    \param settings The settings for disassembly (optional).
-		    \param asFullAst Whether to emit full AST or single expressions.
 		    \return A list of lines of tokens for the instruction.
 		*/
 		std::vector<DisassemblyTextLine> GetLinearLines(
-			const HighLevelILInstruction& instr, DisassemblySettings* settings, bool asFullAst = true);
+			const HighLevelILInstruction& instr, DisassemblySettings* settings);
 
 		/*! Generates lines for a single High Level IL basic block.
 
@@ -13748,13 +13788,12 @@ namespace BinaryNinja {
 		    \param instr The instruction to emit tokens for.
 		    \param tokens The token emitter to use.
 		    \param settings The disassembly settings to use (may be NULL).
-		    \param asFullAst Whether to emit full AST or single expressions.
 		    \param precedence The current operator precedence level.
 		    \param statement Whether the instruction is a statement or an expression.
 		*/
 		virtual void GetExprText(const HighLevelILInstruction& instr, HighLevelILTokenEmitter& tokens,
-			DisassemblySettings* settings, bool asFullAst = true,
-			BNOperatorPrecedence precedence = TopLevelOperatorPrecedence, bool statement = false) = 0;
+			DisassemblySettings* settings, BNOperatorPrecedence precedence = TopLevelOperatorPrecedence,
+			bool statement = false) = 0;
 
 		/*! This method can be overridden to emit tokens at the start of a function.
 
@@ -13800,8 +13839,8 @@ namespace BinaryNinja {
 
 	protected:
 		void GetExprText(const HighLevelILInstruction& instr, HighLevelILTokenEmitter& tokens,
-			DisassemblySettings* settings, bool asFullAst = true,
-			BNOperatorPrecedence precedence = TopLevelOperatorPrecedence, bool statement = false) override;
+			DisassemblySettings* settings, BNOperatorPrecedence precedence = TopLevelOperatorPrecedence,
+			bool statement = false) override;
 	};
 
 	class TypePrinter;
@@ -18487,6 +18526,9 @@ namespace BinaryNinja {
 		void PrependCollapseIndicator(BNInstructionTextTokenContext context, uint64_t hash);
 		bool HasCollapsableRegions();
 		void SetHasCollapsableRegions(bool state);
+
+		/*! Starts a new line in the output. */
+		void InitLine();
 
 		/*! Starts a new line in the output. */
 		void NewLine();

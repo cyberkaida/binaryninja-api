@@ -32,9 +32,9 @@ DSCRawView::DSCRawView(const std::string& typeName, BinaryView* data, bool parse
 	// This is going to load _only_ the dyld header of the loaded file.
 	// This written region will be immediately overwritten on image loading by SharedCache.cpp
 	GetFile()->SetFilename(data->GetFile()->GetOriginalFilename());
-	auto reader = new BinaryReader(GetParentView());
-	reader->Seek(16);
-	auto size = reader->Read32() + 0x8;
+	uint32_t size;
+	GetParentView()->Read(&size, 16, 4);
+	size += 8;
 	AddAutoSegment(0, size, 0, size, SegmentReadable);
 	GetParentView()->WriteBuffer(0, GetParentView()->ReadBuffer(0, size));
 }
@@ -207,8 +207,7 @@ bool DSCView::Init()
 	if (!settings)
 	{
 		Ref<Settings> programSettings = Settings::Instance();
-		programSettings->Set("workflows.enable", true, this);
-		programSettings->Set("workflows.functionWorkflow", "core.function.dsc", this);
+		programSettings->Set("analysis.workflows.functionWorkflow", "core.function.dsc", this);
 	}
 
 	// Add Mach-O file header type info
@@ -631,6 +630,21 @@ bool DSCView::Init()
 		rapidjson::Document result(rapidjson::kObjectType);
 
 		result.Parse(data.c_str());
+
+		if (result.HasMember("metadataVersion"))
+		{
+			if (result["metadataVersion"].GetInt() != METADATA_VERSION)
+			{
+				LogError("Shared cache metadata version mismatch: expected %d, got %d", METADATA_VERSION,
+					result["metadataVersion"].GetInt());
+				return false;
+			}
+		}
+		else
+		{
+			LogError("Shared cache metadata version not found");
+			return false;
+		}
 		for (auto& imgV : result["regionsMappedIntoMemory"].GetArray())
 		{
 			SharedCacheCore::MemoryRegion region;
@@ -751,6 +765,7 @@ bool DSCView::Init()
 	}
 
 	AddAutoSegment(primaryBase, 0x200, 0, 0x200, SegmentReadable);
+	AddAutoSection("__dsc_header", primaryBase, 0x200, ReadOnlyCodeSectionSemantics);
 	DefineType("dyld_cache_header", headerType.name, headerType.type);
 	DefineAutoSymbolAndVariableOrFunction(GetDefaultPlatform(), new Symbol(DataSymbol, "primary_cache_header", primaryBase), headerType.type);
 
@@ -762,7 +777,8 @@ DSCViewType::DSCViewType() : BinaryViewType(VIEW_NAME, VIEW_NAME) {}
 
 BinaryNinja::Ref<BinaryNinja::BinaryView> DSCViewType::Create(BinaryNinja::BinaryView* data)
 {
-	return new DSCView(VIEW_NAME, new DSCRawView("DSCRawView", data, false), false);
+	Ref<BinaryView> rawViewRef = new DSCRawView("DSCRawView", data, false);
+	return new DSCView(VIEW_NAME, rawViewRef, false);
 }
 
 
@@ -788,7 +804,7 @@ Ref<Settings> DSCViewType::GetLoadSettingsForData(BinaryView* data)
 	}
 
 	Ref<Settings> programSettings = Settings::Instance();
-	programSettings->Set("workflows.functionWorkflow", "core.function.dsc", viewRef);
+	programSettings->Set("analysis.workflows.functionWorkflow", "core.function.dsc", viewRef);
 
 	settings->RegisterSetting("loader.dsc.processCFStrings",
 		R"({
@@ -796,6 +812,14 @@ Ref<Settings> DSCViewType::GetLoadSettingsForData(BinaryView* data)
 		"type" : "boolean",
 		"default" : true,
 		"description" : "Processes CoreFoundation strings, applying string values from encoded metadata"
+		})");
+
+	settings->RegisterSetting("loader.dsc.autoLoadLibSystem",
+		R"({
+		"title" : "Auto-Load libSystem",
+		"type" : "boolean",
+		"default" : true,
+		"description" : "Whether to automatically load libsystem_c.dylib. This image contains frequently used noreturn symbols, and not loading it will result in frequently incorrect control flows."
 		})");
 
 	settings->RegisterSetting("loader.dsc.processObjC",

@@ -15,7 +15,38 @@
 #include "thread"
 
 
-std::unordered_map<uint64_t, std::mutex> imageLoadMutex;
+struct GlobalWorkflowState
+{
+	std::mutex imageLoadMutex;
+	bool autoLoadStubsAndDyldData = true;
+	bool autoLoadObjCStubRequirements = true;
+};
+
+static std::unordered_map<uint64_t, GlobalWorkflowState*> globalWorkflowState;
+std::mutex globalWorkflowStateMutex;
+
+GlobalWorkflowState* GetGlobalWorkflowState(Ref<BinaryView> view)
+{
+	std::unique_lock<std::mutex> lock(globalWorkflowStateMutex);
+	if (globalWorkflowState.find(view->GetFile()->GetSessionId()) == globalWorkflowState.end())
+	{
+		globalWorkflowState[view->GetFile()->GetSessionId()] = new GlobalWorkflowState();
+		Ref<Settings> settings = view->GetLoadSettings(VIEW_NAME);
+		bool autoLoadStubsAndDyldData = true;
+		if (settings && settings->Contains("loader.dsc.autoLoadStubsAndDyldData"))
+		{
+			autoLoadStubsAndDyldData = settings->Get<bool>("loader.dsc.autoLoadStubsAndDyldData", view);
+		}
+		globalWorkflowState[view->GetFile()->GetSessionId()]->autoLoadStubsAndDyldData = autoLoadStubsAndDyldData;
+		bool autoLoadObjC = true;
+		if (settings && settings->Contains("loader.dsc.autoLoadObjCStubRequirements"))
+		{
+			autoLoadObjC = settings->Get<bool>("loader.dsc.autoLoadObjCStubRequirements", view);
+		}
+		globalWorkflowState[view->GetFile()->GetSessionId()]->autoLoadObjCStubRequirements = autoLoadObjC;
+	}
+	return globalWorkflowState[view->GetFile()->GetSessionId()];
+}
 
 
 std::vector<std::string> splitSelector(const std::string& selector) {
@@ -50,16 +81,13 @@ void SharedCacheWorkflow::ProcessOffImageCall(Ref<AnalysisContext> ctx, Ref<Func
 	auto bv = func->GetView();
 	WorkerPriorityEnqueue([bv=bv, dest=dest, func=func, applySymbolIfFoundToCurrentFunction]()
 		{
-			SharedCacheAPI::SCRef<SharedCacheAPI::SharedCache> cache = new SharedCacheAPI::SharedCache(bv);
-			Ref<Settings> settings = bv->GetLoadSettings(VIEW_NAME);
-			bool autoLoadStubsAndDyldData = true;
-			if (settings && settings->Contains("loader.dsc.autoLoadStubsAndDyldData"))
-			{
-				autoLoadStubsAndDyldData = settings->Get<bool>("loader.dsc.autoLoadStubsAndDyldData", bv);
-			}
+			auto workflowState = GetGlobalWorkflowState(bv);
+			Ref<SharedCacheAPI::SharedCache> cache = new SharedCacheAPI::SharedCache(bv);
+			if (!cache)
+				return;
 			if (dest.operation != MLIL_CONST_PTR && dest.operation != MLIL_CONST)
 				return;
-			if (autoLoadStubsAndDyldData &&
+			if (workflowState->autoLoadStubsAndDyldData &&
 					(cache->GetNameForAddress(dest.GetConstant()).find("dyld_shared_cache_branch_islands") != std::string::npos
 						|| cache->GetNameForAddress(dest.GetConstant()).find("::_stubs") != std::string::npos
 					)
@@ -91,6 +119,8 @@ void SharedCacheWorkflow::FixupStubs(Ref<AnalysisContext> ctx)
 
 		const auto bv = func->GetView();
 
+		auto workflowState = GetGlobalWorkflowState(bv);
+
 		auto funcStart = func->GetStart();
 		auto sectionExists = !bv->GetSectionsAt(funcStart).empty();
 		if (!sectionExists)
@@ -121,16 +151,8 @@ void SharedCacheWorkflow::FixupStubs(Ref<AnalysisContext> ctx)
 			return;
 		}
 
-		// FIXME optimize
-		Ref<Settings> settings = bv->GetLoadSettings(VIEW_NAME);
-		bool autoLoadObjC = true;
-		if (settings && settings->Contains("loader.dsc.autoLoadObjCStubRequirements"))
-		{
-			autoLoadObjC = settings->Get<bool>("loader.dsc.autoLoadObjCStubRequirements", bv);
-		}
-
 		// Processor that automatically loads the libObjC image when it encounters a stub (so we can do inlining).
-		if (autoLoadObjC && section->GetName().find("__objc_stubs") != std::string::npos)
+		if (workflowState->autoLoadObjCStubRequirements && section->GetName().find("__objc_stubs") != std::string::npos)
 		{
 			auto firstInstruction = mlil->GetInstruction(0);
 			if (firstInstruction.operation == MLIL_TAILCALL)
@@ -163,27 +185,34 @@ void SharedCacheWorkflow::FixupStubs(Ref<AnalysisContext> ctx)
 							{
 								bool otherFunctionAlreadyRunning;
 								{
-									otherFunctionAlreadyRunning = !imageLoadMutex[bv->GetFile()->GetSessionId()].try_lock();
+									otherFunctionAlreadyRunning = !workflowState->imageLoadMutex.try_lock();
 									if (!otherFunctionAlreadyRunning)
-										imageLoadMutex[bv->GetFile()->GetSessionId()].unlock();
+										workflowState->imageLoadMutex.unlock();
 								}
 								if (otherFunctionAlreadyRunning)
 								{
 									return;
 								}
 
-								std::unique_lock<std::mutex> lock(imageLoadMutex[bv->GetFile()->GetSessionId()]);
+								std::unique_lock<std::mutex> lock(workflowState->imageLoadMutex);
 								auto def = mssa->GetSSAVarDefinition(dest.GetSourceSSAVariable());
 								auto defInstr = mssa->GetInstruction(def);
 								auto targetOffset = defInstr.GetSourceExpr().GetSourceExpr().GetConstant();
-								auto sharedCache = SharedCacheAPI::SharedCache(bv);
-								if (!sharedCache.GetImageNameForAddress(targetOffset).empty())
+
+								if (bv->IsValidOffset(targetOffset))
+									return;
+
+								Ref<SharedCacheAPI::SharedCache> cache = new SharedCacheAPI::SharedCache(bv);
+
+								if (!cache)
+									return;
+								if (!cache->GetImageNameForAddress(targetOffset).empty())
 								{
-									sharedCache.LoadImageContainingAddress(targetOffset);
+									cache->LoadImageContainingAddress(targetOffset);
 								}
 								else
 								{
-									sharedCache.LoadSectionAtAddress(targetOffset);
+									cache->LoadSectionAtAddress(targetOffset);
 								}
 								for (const auto &sectFunc : bv->GetAnalysisFunctionList())
 								{
@@ -199,26 +228,33 @@ void SharedCacheWorkflow::FixupStubs(Ref<AnalysisContext> ctx)
 						{
 							bool otherFunctionAlreadyRunning;
 							{
-								otherFunctionAlreadyRunning = !imageLoadMutex[bv->GetFile()->GetSessionId()].try_lock();
+								otherFunctionAlreadyRunning = !workflowState->imageLoadMutex.try_lock();
 								if (!otherFunctionAlreadyRunning)
-									imageLoadMutex[bv->GetFile()->GetSessionId()].unlock();
+									workflowState->imageLoadMutex.unlock();
 							}
 							if (otherFunctionAlreadyRunning)
 							{
 								return;
 							}
 
-							std::unique_lock<std::mutex> lock(imageLoadMutex[bv->GetFile()->GetSessionId()]);
+							std::unique_lock<std::mutex> lock(workflowState->imageLoadMutex);
 							auto dest = instr.GetDestExpr<MLIL_JUMP>();
 							auto targetOffset = dest.GetConstant();
-							auto sharedCache = SharedCacheAPI::SharedCache(bv);
-							if (!sharedCache.GetImageNameForAddress(targetOffset).empty())
+							if (bv->IsValidOffset(targetOffset))
+								return;
+
+							Ref<SharedCacheAPI::SharedCache> cache = new SharedCacheAPI::SharedCache(bv);
+
+							if (!cache)
+								return;
+
+							if (!cache->GetImageNameForAddress(targetOffset).empty())
 							{
-								sharedCache.LoadImageContainingAddress(targetOffset);
+								cache->LoadImageContainingAddress(targetOffset);
 							}
 							else
 							{
-								sharedCache.LoadSectionAtAddress(targetOffset);
+								cache->LoadSectionAtAddress(targetOffset);
 							}
 							for (const auto &sectFunc : bv->GetAnalysisFunctionList())
 							{
@@ -300,9 +336,9 @@ void SharedCacheWorkflow::FixupStubs(Ref<AnalysisContext> ctx)
 									bool otherFunctionAlreadyRunning;
 									{
 										otherFunctionAlreadyRunning =
-											!imageLoadMutex[bv->GetFile()->GetSessionId()].try_lock();
+											!workflowState->imageLoadMutex.try_lock();
 										if (!otherFunctionAlreadyRunning)
-											imageLoadMutex[bv->GetFile()->GetSessionId()].unlock();
+											workflowState->imageLoadMutex.unlock();
 									}
 									if (otherFunctionAlreadyRunning)
 									{
@@ -310,28 +346,32 @@ void SharedCacheWorkflow::FixupStubs(Ref<AnalysisContext> ctx)
 									}
 
 									std::unique_lock<std::mutex> lock(
-										imageLoadMutex[bv->GetFile()->GetSessionId()]);
+										workflowState->imageLoadMutex);
 									auto def = mssa->GetSSAVarDefinition(dest.GetSourceSSAVariable());
 									auto defInstr = mssa->GetInstruction(def);
 									auto targetOffset = defInstr.GetSourceExpr().GetSourceExpr().GetConstant();
-									auto sharedCache = SharedCacheAPI::SharedCache(bv);
-									if (!bv->IsValidOffset(targetOffset))
+
+									if (bv->IsValidOffset(targetOffset))
+										return;
+
+									Ref<SharedCacheAPI::SharedCache> cache = new SharedCacheAPI::SharedCache(bv);
+
+									if (!cache)
+										return;
+
+									if (!cache->GetImageNameForAddress(targetOffset).empty())
 									{
-										if (!sharedCache.GetImageNameForAddress(targetOffset).empty())
+										cache->LoadImageContainingAddress(targetOffset);
+									}
+									else
+									{
+										cache->LoadSectionAtAddress(targetOffset);
+									}
+									for (const auto &sectFunc : bv->GetAnalysisFunctionList())
+									{
+										if (section->GetStart() <= sectFunc->GetStart() && sectFunc->GetStart() < section->GetEnd())
 										{
-											sharedCache.LoadImageContainingAddress(targetOffset);
-										}
-										else
-										{
-											sharedCache.LoadSectionAtAddress(targetOffset);
-										}
-										for (const auto& sectFunc : bv->GetAnalysisFunctionList())
-										{
-											if (section->GetStart() <= sectFunc->GetStart()
-												&& sectFunc->GetStart() < section->GetEnd())
-											{
-												func->Reanalyze();
-											}
+											func->Reanalyze();
 										}
 									}
 								}
@@ -478,7 +518,7 @@ void fixObjCCallTypes(Ref<AnalysisContext> ctx)
 
 void SharedCacheWorkflow::Register()
 {
-	const auto wf = BinaryNinja::Workflow::Instance()->Clone("core.function.dsc");
+	Ref<Workflow> wf = BinaryNinja::Workflow::Instance("core.function.defaultAnalysis")->Clone("core.function.dsc");
 	wf->RegisterActivity(new BinaryNinja::Activity("core.analysis.dscstubs", &SharedCacheWorkflow::FixupStubs));
 	wf->RegisterActivity(new BinaryNinja::Activity("core.analysis.fixObjCCallTypes", &fixObjCCallTypes));
 	wf->Insert("core.function.analyzeTailCalls", "core.analysis.fixObjCCallTypes");

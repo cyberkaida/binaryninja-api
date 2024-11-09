@@ -37,7 +37,12 @@ pub fn from_bn_symbol(raw_symbol: &BNSymbol) -> Symbol {
     let symbol_name = raw_symbol.raw_name().to_string();
     match raw_symbol.sym_type() {
         BNSymbolType::ImportAddress => {
-            todo!()
+            Symbol::new(
+                symbol_name,
+                SymbolClass::Function,
+                // TODO: External = symbolic i guess
+                SymbolModifiers::External,
+            )
         }
         BNSymbolType::Data => {
             Symbol::new(
@@ -48,17 +53,22 @@ pub fn from_bn_symbol(raw_symbol: &BNSymbol) -> Symbol {
             )
         }
         BNSymbolType::Symbolic => {
-            todo!()
+            Symbol::new(
+                symbol_name,
+                SymbolClass::Function,
+                // TODO: External = symbolic i guess
+                SymbolModifiers::External,
+            )
         }
         BNSymbolType::LocalLabel => {
-            todo!()
+            // TODO: This is a placeholder for another symbol.
+            Symbol::new(symbol_name, SymbolClass::Data, SymbolModifiers::External)
         }
-        // BN External is our Exported
         BNSymbolType::External => Symbol::new(
             symbol_name,
-            // TODO: Data?
-            SymbolClass::Data,
-            SymbolModifiers::Exported,
+            // TODO: External data?
+            SymbolClass::Function,
+            SymbolModifiers::External,
         ),
         BNSymbolType::ImportedData => {
             Symbol::new(symbol_name, SymbolClass::Data, SymbolModifiers::External)
@@ -68,10 +78,10 @@ pub fn from_bn_symbol(raw_symbol: &BNSymbol) -> Symbol {
             SymbolClass::Function,
             SymbolModifiers::default(),
         ),
-        // BN Imported is our External
         BNSymbolType::ImportedFunction => Symbol::new(
             symbol_name,
             SymbolClass::Function,
+            // TODO: Exported?
             SymbolModifiers::External,
         ),
     }
@@ -107,14 +117,14 @@ pub fn to_bn_symbol_at_address(view: &BinaryView, symbol: &Symbol, addr: u64) ->
     symbol_builder.create()
 }
 
-pub fn from_bn_type(view: &BinaryView, raw_ty: BNRef<BNType>, confidence: u8) -> Type {
+pub fn from_bn_type(view: &BinaryView, raw_ty: &BNType, confidence: u8) -> Type {
     from_bn_type_internal(view, &mut HashSet::new(), raw_ty, confidence)
 }
 
 fn from_bn_type_internal(
     view: &BinaryView,
     visited_refs: &mut HashSet<String>,
-    raw_ty: BNRef<BNType>,
+    raw_ty: &BNType,
     confidence: u8,
 ) -> Type {
     let bytes_to_bits = |val| val * 8;
@@ -165,7 +175,7 @@ fn from_bn_type_internal(
                         ty: from_bn_type_internal(
                             view,
                             visited_refs,
-                            raw_member.ty.contents,
+                            &raw_member.ty.contents,
                             raw_member.ty.confidence,
                         ),
                         modifiers,
@@ -182,7 +192,7 @@ fn from_bn_type_internal(
                     let base_struct_ty = from_bn_type_internal(
                         view,
                         visited_refs,
-                        BNType::named_type(&base_struct.ty),
+                        &BNType::named_type(&base_struct.ty),
                         255,
                     );
                     StructureMember {
@@ -229,7 +239,7 @@ fn from_bn_type_internal(
                 child_type: from_bn_type_internal(
                     view,
                     visited_refs,
-                    raw_child_ty.contents,
+                    &raw_child_ty.contents,
                     raw_child_ty.confidence,
                 ),
                 // TODO: Handle addressing.
@@ -245,7 +255,7 @@ fn from_bn_type_internal(
                 member_type: from_bn_type_internal(
                     view,
                     visited_refs,
-                    raw_member_ty.contents,
+                    &raw_member_ty.contents,
                     raw_member_ty.confidence,
                 ),
                 modifiers: ArrayModifiers::empty(),
@@ -265,7 +275,7 @@ fn from_bn_type_internal(
                         ty: from_bn_type_internal(
                             view,
                             visited_refs,
-                            raw_member.t.contents,
+                            &raw_member.t.contents,
                             raw_member.t.confidence,
                         ),
                         // TODO: Just omit location for now?
@@ -282,7 +292,7 @@ fn from_bn_type_internal(
                     ty: from_bn_type_internal(
                         view,
                         visited_refs,
-                        return_ty.contents,
+                        &return_ty.contents,
                         return_ty.confidence,
                     ),
                     locations: vec![],
@@ -324,7 +334,7 @@ fn from_bn_type_internal(
                     cached_type.value().to_owned()
                 } else {
                     let ntr_ty =
-                        from_bn_type_internal(view, visited_refs, raw_ntr_ty.unwrap(), confidence);
+                        from_bn_type_internal(view, visited_refs, &raw_ntr_ty.unwrap(), confidence);
                     visited_refs.remove(&ref_id_str);
                     // NOTE: The GUID here must always equal the same for any given type for this to work effectively.
                     let ntr_guid = TypeGUID::from(&ntr_ty);
@@ -608,7 +618,7 @@ mod tests {
                         .types()
                         .iter()
                         .map(|t| {
-                            let ty = from_bn_type(&bv, t.type_object().clone(), u8::MAX);
+                            let ty = from_bn_type(&bv, &t.type_object(), u8::MAX);
                             (TypeGUID::from(&ty), ty)
                         })
                         .collect();
@@ -632,7 +642,7 @@ mod tests {
                         .types()
                         .iter()
                         .map(|t| {
-                            let ty = from_bn_type(&inital_bv, t.type_object().clone(), u8::MAX);
+                            let ty = from_bn_type(&inital_bv, &t.type_object(), u8::MAX);
                             (TypeGUID::from(&ty), ty)
                         })
                         .collect();
@@ -653,7 +663,7 @@ mod tests {
                             .types()
                             .iter()
                             .map(|t| {
-                                let ty = from_bn_type(&second_bv, t.type_object().clone(), u8::MAX);
+                                let ty = from_bn_type(&second_bv, &t.type_object(), u8::MAX);
                                 (TypeGUID::from(&ty), ty)
                             })
                             .collect();

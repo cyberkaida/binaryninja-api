@@ -2073,7 +2073,7 @@ class MemoryMap:
 		>>> segments = Segment.serialize(image_base=base, start=base, length=0x1000, data_offset=0, data_length=0x1000, flags=SegmentFlag.SegmentReadable|SegmentFlag.SegmentExecutable)
 		>>> segments = Segment.serialize(image_base=base, start=rom_base, length=0x1000, flags=SegmentFlag.SegmentReadable, segments=segments)
 		>>> view = load(bytes.fromhex('5054ebfe'), options={'loader.imageBase': base, 'loader.platform': 'x86', 'loader.segments': segments})
-		>>> print(view.memory_map)
+		>>> view.memory_map
 			<region: 0x10000 - 0x10004>
 				size: 0x4
 				objects:
@@ -2090,7 +2090,7 @@ class MemoryMap:
 					'origin<Mapped>@0xbfff1000' | Unmapped | <---> | FILL<0x0>
 		>>> view.memory_map.add_memory_region("rom", rom_base, b'\x90' * 4096, SegmentFlag.SegmentReadable | SegmentFlag.SegmentExecutable)
 		True
-		>>> print(view.memory_map)
+		>>> view.memory_map
 			<region: 0x10000 - 0x10004>
 				size: 0x4
 				objects:
@@ -2112,7 +2112,7 @@ class MemoryMap:
 		True
 		>>> view.read(rom_base, 16)
 		b'\xa5\xa5\xa5\xa5\xa5\xa5\xa5\xa5\x90\x90\x90\x90\x90\x90\x90\x90'
-		>>> print(view.memory_map)
+		>>> view.memory_map
 			<region: 0x10000 - 0x10004>
 				size: 0x4
 				objects:
@@ -2138,10 +2138,23 @@ class MemoryMap:
 	"""
 
 	def __repr__(self):
-		return pprint.pformat(self.description())
+		return self.__str__()
 
 	def __str__(self):
 		description = self.description()
+		return self.format_description(description)
+
+	def __len__(self):
+		mm_json = self.description()
+		if 'MemoryMap' in mm_json:
+			return len(mm_json['MemoryMap'])
+		else:
+			return 0
+
+	def __init__(self, handle: 'BinaryView'):
+		self.handle = handle
+
+	def format_description(self, description: dict) -> str:
 		formatted_description = ""
 		for entry in description['MemoryMap']:
 			formatted_description += f"<region: {hex(entry['address'])} - {hex(entry['address'] + entry['length'])}>\n"
@@ -2166,18 +2179,15 @@ class MemoryMap:
 
 		return formatted_description
 
-	def __init__(self, handle: 'BinaryView'):
-		self.handle = handle
-
-	def __len__(self):
-		mm_json = self.description()
-		if 'MemoryMap' in mm_json:
-			return len(mm_json['MemoryMap'])
-		else:
-			return 0
-
-	def description(self):
+	def description(self, base: bool = False) -> dict:
+		if base:
+			return json.loads(core.BNGetBaseMemoryMapDescription(self.handle))
 		return json.loads(core.BNGetMemoryMapDescription(self.handle))
+
+	@property
+	def base(self):
+		"""Formatted string of the base memory map, consisting of unresolved auto and user segments (read-only)."""
+		return self.format_description(self.description(base=True))
 
 	def add_memory_region(self, name: str, start: int, source: Union['os.PathLike', str, bytes, bytearray, 'BinaryView', 'databuffer.DataBuffer', 'fileaccessor.FileAccessor'], flags: SegmentFlag = 0) -> bool:
 		"""
@@ -3266,7 +3276,7 @@ class BinaryView:
 
 	@property
 	def segments(self) -> List['Segment']:
-		"""List of segments (read-only)"""
+		"""List of resolved segments (read-only)"""
 		count = ctypes.c_ulonglong(0)
 		segment_list = core.BNGetSegments(self.handle, count)
 		assert segment_list is not None, "core.BNGetSegments returned None"
@@ -4653,10 +4663,10 @@ class BinaryView:
 		"""
 		``update_analysis`` asynchronously starts the analysis process and returns immediately.
 
-		Call ``update_analysis`` after making changes that could affect the analysis results,
-		such as adding or modifying functions. This ensures that the analysis is updated to
-		reflect the latest changes. The analysis runs in the background, allowing other operations
-		to continue.
+		**Usage**:
+		Call ``update_analysis`` after making changes that could affect the analysis results, such as adding or modifying
+		functions. This ensures that the analysis is updated to reflect the latest changes. The analysis runs in the background,
+		allowing other operations to continue.
 
 		:rtype: None
 		"""
@@ -4664,8 +4674,21 @@ class BinaryView:
 
 	def update_analysis_and_wait(self) -> None:
 		"""
-		``update_analysis_and_wait`` blocking call to update the analysis, this call returns when the analysis is
-		complete. An analysis update **must** be run after changes are made which could change analysis results such as adding functions.
+		``update_analysis_and_wait`` starts the analysis process and blocks until it is complete. This method should be
+		used when it is necessary to ensure that analysis results are fully updated before proceeding with further operations.
+		If an update is already in progress, this method chains a new update request to ensure that the update processes
+		all pending changes before the call was made.
+
+		**Usage**:
+		Call ``update_analysis_and_wait`` after making changes that could affect the analysis results, such as adding or modifying
+		functions, to ensure that the analysis reflects the latest changes. Unlike ``update_analysis``, this method waits for the
+		analysis to finish before returning.
+
+		**Thread Restrictions**:
+		- **Worker Threads**: This function cannot be called from a worker thread. If called from a worker thread, an error will be
+		logged, and the function will return immediately.
+		- **UI Threads**: This function cannot be called from a UI thread. If called from a UI thread, an error will be logged, and
+		the function will return immediately.
 
 		:rtype: None
 		"""
@@ -9057,6 +9080,45 @@ to a the type "tagRECT" found in the typelibrary "winX64common"
 			return None
 		return value.value
 
+	def begin_bulk_add_segments(self) -> None:
+		"""
+		``begin_bulk_add_segments`` Begins a bulk segment addition operation.
+
+		This function prepares the `BinaryView` for bulk addition of both auto and user-defined segments.
+		During the bulk operation, segments can be added using `add_auto_segment` or similar functions
+		without immediately triggering the MemoryMap update process. The queued segments will not take
+		effect until `end_bulk_add_segments` is called.
+		"""
+		core.BNBeginBulkAddSegments(self.handle)
+
+
+	def end_bulk_add_segments(self) -> None:
+		"""
+		``end_bulk_add_segments`` Finalizes and applies all queued segments (auto and user)
+		added during a bulk segment addition operation.
+
+		This function commits all segments that were queued since the last call to `begin_bulk_add_segments`.
+		The MemoryMap update process is executed at this point, applying all changes in one batch for
+		improved performance.
+
+		Note: This function must be called after `begin_bulk_add_segments` to apply the queued segments.
+		"""
+		core.BNEndBulkAddSegments(self.handle)
+
+
+	def cancel_bulk_add_segments(self) -> None:
+		"""
+		``cancel_bulk_add_segments`` Cancels a bulk segment addition operation.
+
+		This function discards all auto and user segments that were queued since the last call to
+		`begin_bulk_add_segments` without applying them. It allows you to abandon the changes in case
+		they are no longer needed.
+
+		Note: If no bulk operation is in progress, calling this function has no effect.
+		"""
+		core.BNCancelBulkAddSegments(self.handle)
+
+
 	def add_auto_segment(self, start: int, length: int, data_offset: int, data_length: int, flags: SegmentFlag) -> None:
 		"""
 		``add_auto_segment`` Adds an analysis segment that specifies how data from the raw file is mapped into a virtual address space
@@ -9069,17 +9131,18 @@ to a the type "tagRECT" found in the typelibrary "winX64common"
 		"""
 		``add_auto_segments`` Adds analysis segments that specify how data from the raw file is mapped into a virtual address space
 
-		Note that the segments added may have different size attributes than requested
+		:param List[core.BNSegmentInfo] segments: list of segments to add
+		:rtype: None
 		"""
-		segment_arr = (core.BNSegmentInfo * len(segments))(*segments)
-		core.BNAddAutoSegments(self.handle, segment_arr, len(segments))
+		segment_list = (core.BNSegmentInfo * len(segments))(*segments)
+		core.BNAddAutoSegments(self.handle, segment_list, len(segments))
 
-	def remove_auto_segment(self, start: int, length: int) -> None:
+	def remove_auto_segment(self, start: int, length: int = 0) -> None:
 		"""
-		``remove_auto_segment`` removes an automatically generated segment from the current segment mapping.
+		``remove_auto_segment`` Removes an automatically generated segment from the current segment mapping. This method removes the most recently added 'auto' segment that either matches the specified start address or contains it.
 
 		:param int start: virtual address of the start of the segment
-		:param int length: length of the segment
+		:param int length: length of the segment (unused)
 		:rtype: None
 
 		.. warning:: This action is not persistent across saving of a BNDB and must be re-applied each time a BNDB is loaded.
@@ -9100,7 +9163,24 @@ to a the type "tagRECT" found in the typelibrary "winX64common"
 		"""
 		core.BNAddUserSegment(self.handle, start, length, data_offset, data_length, flags)
 
-	def remove_user_segment(self, start: int, length: int) -> None:
+	def add_user_segments(self, segments: List[core.BNSegmentInfo]) -> None:
+		"""
+		``add_user_segments`` Adds user-defined segments that specify how data from the raw file is mapped into a virtual address space
+
+		:param List[core.BNSegmentInfo] segments: list of segments to add
+		:rtype: None
+		"""
+		segment_list = (core.BNSegmentInfo * len(segments))(*segments)
+		core.BNAddUserSegments(self.handle, segment_list, len(segments))
+
+	def remove_user_segment(self, start: int, length: int = 0) -> None:
+		"""
+		``remove_user_segment`` Removes a user-defined segment from the current segment mapping. This method removes the most recently added 'user' segment that either matches the specified start address or contains it.
+
+		:param int start: virtual address of the start of the segment
+		:param int length: length of the segment (unused)
+		:rtype: None
+		"""
 		core.BNRemoveUserSegment(self.handle, start, length)
 
 	def get_segment_at(self, addr: int) -> Optional[Segment]:
@@ -9434,7 +9514,7 @@ to a the type "tagRECT" found in the typelibrary "winX64common"
 			return None
 		return settings.Settings(handle=settings_handle)
 
-	def set_load_settings(self, type_name: str, settings: settings.Settings) -> None:
+	def set_load_settings(self, type_name: str, settings: Optional[settings.Settings]) -> None:
 		"""
 		``set_load_settings`` set a :py:class:`~binaryninja.settings.Settings` object which defines the load settings for the given :py:class:`BinaryViewType` ``type_name``
 

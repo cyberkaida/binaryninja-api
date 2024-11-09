@@ -37,7 +37,7 @@
 // Current ABI version for linking to the core. This is incremented any time
 // there are changes to the API that affect linking, including new functions,
 // new types, or modifications to existing functions or types.
-#define BN_CURRENT_CORE_ABI_VERSION 81
+#define BN_CURRENT_CORE_ABI_VERSION 83
 
 // Minimum ABI version that is supported for loading of plugins. Plugins that
 // are linked to an ABI version less than this will not be able to load and
@@ -4003,6 +4003,7 @@ extern "C"
 	BINARYNINJACOREAPI void BNUnregisterViewOfType(BNFileMetadata* file, const char* type, BNBinaryView* view);
 
 	// Memory Map
+	BINARYNINJACOREAPI char* BNGetBaseMemoryMapDescription(BNBinaryView* view);
 	BINARYNINJACOREAPI char* BNGetMemoryMapDescription(BNBinaryView* view);
 	BINARYNINJACOREAPI bool BNAddBinaryMemoryRegion(BNBinaryView* view, const char* name, uint64_t start, BNBinaryView* data, uint32_t flags);
 	BINARYNINJACOREAPI bool BNAddDataMemoryRegion(BNBinaryView* view, const char* name, uint64_t start, BNDataBuffer* data, uint32_t flags);
@@ -4145,10 +4146,14 @@ extern "C"
 	BINARYNINJACOREAPI bool BNSearch(BNBinaryView* view, const char* query, void* context, bool (*callback)(void*, uint64_t, BNDataBuffer*));
 	BINARYNINJACOREAPI bool BNPerformSearch(const char* query, const uint8_t* buffer, size_t size, bool(*callback)(void*, size_t, size_t), void* context);
 
+	BINARYNINJACOREAPI void BNBeginBulkAddSegments(BNBinaryView* view);
+	BINARYNINJACOREAPI void BNEndBulkAddSegments(BNBinaryView* view);
+	BINARYNINJACOREAPI void BNCancelBulkAddSegments(BNBinaryView* view);
 	BINARYNINJACOREAPI void BNAddAutoSegment(BNBinaryView* view, uint64_t start, uint64_t length, uint64_t dataOffset, uint64_t dataLength, uint32_t flags);
 	BINARYNINJACOREAPI void BNAddAutoSegments(BNBinaryView* view, const BNSegmentInfo* segmentInfo, size_t count);
 	BINARYNINJACOREAPI void BNRemoveAutoSegment(BNBinaryView* view, uint64_t start, uint64_t length);
 	BINARYNINJACOREAPI void BNAddUserSegment(BNBinaryView* view, uint64_t start, uint64_t length, uint64_t dataOffset, uint64_t dataLength, uint32_t flags);
+	BINARYNINJACOREAPI void BNAddUserSegments(BNBinaryView* view, const BNSegmentInfo* segmentInfo, size_t count);
 	BINARYNINJACOREAPI void BNRemoveUserSegment(BNBinaryView* view, uint64_t start, uint64_t length);
 	BINARYNINJACOREAPI BNSegment** BNGetSegments(BNBinaryView* view, size_t* count);
 	BINARYNINJACOREAPI void BNFreeSegmentList(BNSegment** segments, size_t count);
@@ -7961,6 +7966,7 @@ extern "C"
 	BINARYNINJACOREAPI void BNHighLevelILTokenEmitterSetHasCollapsableRegions(BNHighLevelILTokenEmitter* emitter, bool state);
 	BINARYNINJACOREAPI void BNFreeHighLevelILTokenEmitter(BNHighLevelILTokenEmitter* emitter);
 	BINARYNINJACOREAPI void BNHighLevelILTokenEmitterAppend(BNHighLevelILTokenEmitter* emitter, BNInstructionTextToken* token);
+	BINARYNINJACOREAPI void BNHighLevelILTokenEmitterInitLine(BNHighLevelILTokenEmitter* emitter);
 	BINARYNINJACOREAPI void BNHighLevelILTokenEmitterNewLine(BNHighLevelILTokenEmitter* emitter);
 	BINARYNINJACOREAPI void BNHighLevelILTokenEmitterIncreaseIndent(BNHighLevelILTokenEmitter* emitter);
 	BINARYNINJACOREAPI void BNHighLevelILTokenEmitterDecreaseIndent(BNHighLevelILTokenEmitter* emitter);

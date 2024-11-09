@@ -74,5 +74,5 @@ extern "C" int powerpc_decompose(const uint8_t *data, int size, uint32_t addr,
 	bool lil_end, struct decomp_result *result, bool is_64bit, int cs_mode);
 extern "C" int powerpc_disassemble(struct decomp_result *, char *buf, size_t len);
 
-extern "C" const char *powerpc_reg_to_str(uint32_t rid, int);
-
+extern "C" const char *powerpc_reg_to_str(uint32_t rid, int cs_mode_arg);
+extern "C" const uint32_t powerpc_crx_to_reg(uint32_t rid);

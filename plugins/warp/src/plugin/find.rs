@@ -1,10 +1,11 @@
+use crate::cache::try_cached_function_guid;
 use binaryninja::binaryview::{BinaryView, BinaryViewExt};
 use binaryninja::command::Command;
+use binaryninja::function::Function as BNFunction;
+use binaryninja::rc::Guard as BNGuard;
 use rayon::prelude::*;
 use std::thread;
 use warp::signature::function::FunctionGUID;
-
-use crate::cache::cached_function_guid;
 
 pub struct FindFunctionFromGUID;
 
@@ -27,24 +28,24 @@ impl Command for FindFunctionFromGUID {
         thread::spawn(move || {
             let background_task = binaryninja::backgroundtask::BackgroundTask::new(
                 format!("Searching functions for GUID... {}", searched_guid),
-                true,
+                false,
             )
             .unwrap();
 
-            // TODO: While background_task has not finished.
+            // Only run this for functions which have already generated a GUID.
             let matched = funcs
                 .par_iter()
-                .filter_map(|func| {
-                    Some((
-                        func.clone(),
-                        cached_function_guid(&func, func.low_level_il_if_available()?.as_ref()),
-                    ))
+                .filter(|func| {
+                    try_cached_function_guid(func).is_some_and(|guid| guid == searched_guid)
                 })
-                .filter(|(_func, guid)| guid.eq(&searched_guid))
-                .collect::<Vec<_>>();
+                .collect::<Vec<BNGuard<BNFunction>>>();
 
-            for (func, _) in matched {
-                log::info!("Match found at function... 0x{:0x}", func.start());
+            if matched.is_empty() {
+                log::info!("No matches found for GUID... {}", searched_guid);
+            } else {
+                for func in matched {
+                    log::info!("Match found at function... 0x{:0x}", func.start());
+                }
             }
 
             background_task.finish();

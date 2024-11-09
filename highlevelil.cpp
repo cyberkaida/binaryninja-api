@@ -504,17 +504,16 @@ vector<DisassemblyTextLine> HighLevelILFunction::GetExprText(ExprId expr, bool a
 
 
 vector<DisassemblyTextLine> HighLevelILFunction::GetExprText(
-    const HighLevelILInstruction& instr, bool asFullAst, DisassemblySettings* settings)
+	const HighLevelILInstruction& instr, DisassemblySettings* settings)
 {
-	return GetExprText(instr.exprIndex, asFullAst, settings);
+	return GetExprText(instr.exprIndex, instr.ast, settings);
 }
 
 
-vector<DisassemblyTextLine> HighLevelILFunction::GetInstructionText(
-    size_t i, bool asFullAst, DisassemblySettings* settings)
+vector<DisassemblyTextLine> HighLevelILFunction::GetInstructionText(size_t i, DisassemblySettings* settings)
 {
 	HighLevelILInstruction instr = GetInstruction(i);
-	return GetExprText(instr, asFullAst, settings);
+	return GetExprText(instr, settings);
 }
 
 
@@ -682,6 +681,12 @@ bool HighLevelILTokenEmitter::HasCollapsableRegions()
 void HighLevelILTokenEmitter::SetHasCollapsableRegions(bool state)
 {
 	BNHighLevelILTokenEmitterSetHasCollapsableRegions(m_object, state);
+}
+
+
+void HighLevelILTokenEmitter::InitLine()
+{
+	BNHighLevelILTokenEmitterInitLine(m_object);
 }
 
 

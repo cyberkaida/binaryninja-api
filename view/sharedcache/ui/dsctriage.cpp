@@ -17,14 +17,16 @@
 #define QSETTINGS_KEY_SELECTED_TAB "DSCTriage-SelectedTab"
 #define QSETTINGS_KEY_TAB_LAYOUT "DSCTriage-TabLayout"
 #define QSETTINGS_KEY_IMAGELOAD_TAB_LAYOUT "DSCTriage-ImageLoadTabLayout"
-#define QSETTINGS_KEY_ALPHA_POPUP_SEEN "DSCTriage-AlphaPopupSeen"
+#define QSETTINGS_KEY_ALPHA_POPUP_SEEN "DSCTriage-AlphaPopupSeenV2"
 
 
-DSCCacheBlocksView::DSCCacheBlocksView(QWidget* parent, BinaryViewRef data, SharedCacheAPI::SCRef<SharedCacheAPI::SharedCache> cache)
+DSCCacheBlocksView::DSCCacheBlocksView(QWidget* parent, BinaryViewRef data, Ref<SharedCacheAPI::SharedCache> cache)
 	: QWidget(parent), m_data(data), m_cache(cache)
 {
 	setMouseTracking(true);
 	m_backingCacheCount = SharedCacheAPI::SharedCache::FastGetBackingCacheCount(data);
+	if (m_backingCacheCount == 0)
+		return;
 	m_blockLuminance.resize(m_backingCacheCount, 128);
 	m_blockSizeRatios.resize(m_backingCacheCount, 1);
 	m_currentProgress = m_cache->GetLoadProgress(data);
@@ -61,6 +63,10 @@ DSCCacheBlocksView::DSCCacheBlocksView(QWidget* parent, BinaryViewRef data, Shar
 								 ->withEasingCurve(QEasingCurve::InOutCirc)
 	->thenOnStart([this](QAbstractAnimation::Direction)
 	{
+		if (m_backingCaches.size() < m_backingCacheCount)
+		{
+			return;
+		}
 		uint64_t totalSize = 0;
 		uint64_t sumCountForAvg = 0;
 		for (size_t i = 0; i < m_backingCacheCount; i++)
@@ -116,6 +122,8 @@ DSCCacheBlocksView::DSCCacheBlocksView(QWidget* parent, BinaryViewRef data, Shar
 	})
 	->thenOnEnd([this](QAbstractAnimation::Direction)
 	{
+		if (m_backingCaches.size() == 0)
+			return;
 		emit selectionChanged(m_backingCaches[0], true);
 	});
 
@@ -477,8 +485,8 @@ void SymbolTableModel::setFilter(std::string text)
 }
 
 
-SymbolTableView::SymbolTableView(QWidget* parent, SharedCacheAPI::SCRef<SharedCacheAPI::SharedCache> cache)
-	: m_model(new SymbolTableModel(this)){
+SymbolTableView::SymbolTableView(QWidget* parent, Ref<SharedCacheAPI::SharedCache> cache)
+	: m_model(new SymbolTableModel(this)) {
 
 	// Set up the filter model
 	setModel(m_model);
@@ -631,52 +639,7 @@ DSCTriageView::DSCTriageView(QWidget* parent, BinaryViewRef data) : QWidget(pare
 
 	containerWidget->addWidget(cacheInfo);
 
-	QWidget* defaultWidget;
-
-	// check for alpha popup qsetting
-	QSettings settings;
-	if (!(settings.contains(QSETTINGS_KEY_ALPHA_POPUP_SEEN) && settings.value(QSETTINGS_KEY_ALPHA_POPUP_SEEN).toBool()))
-	{
-
-		QTextBrowser *tb = new QTextBrowser(this);
-		{
-			tb->setOpenExternalLinks(true);
-			auto alphaHtml =
-				R"(
-<br>
-<h1>Shared Cache Alpha</h1>
-
-<p> This is the alpha release of the sharedcache viewer! We are hard at work improving this and adding features, but we wanted
-to make it available for users to play with as soon as possible. </p>
-
-<h2> Supported Platforms </h2>
-<ul>
-	<li> iOS 11-17 (full) </li>
-	<li> iOS 18 (partial, Objective-C optimization parsing is not implemented yet.) </li>
-	<li> macOS x86/arm64e (partial) </li>
-</ul>
-
-<p> iOS parsing should work well for now. macOS parsing should be usable, but is still a work in progress. </p>
-
-<h2> Getting the latest version of the plugin </h2>
-
-<p> We frequently release "dev" builds which will contain the latest version of the SharedCache plugin (and many other things).
-
-You can find instructions on how to install these builds <a href="https://docs.binary.ninja/guide/index.html#development-branch">here</a>. </p>
-
-<h3> Reading / building the source </h3>
-<p>You can read the source and find instructions for building it <a href="https://github.com/Vector35/binaryninja-api/tree/dev/view/sharedcache">here</a>.
-
-Contributions are always welcome! </p>
-)";
-			tb->setHtml(alphaHtml);
-
-			m_triageTabs->addTab(tb, "Shared Cache Alpha");
-
-		}
-		settings.setValue(QSETTINGS_KEY_ALPHA_POPUP_SEEN, true);
-		defaultWidget = tb;
-	}
+	QWidget* defaultWidget = nullptr;
 
 	m_bottomRegionCollection = new DockableTabCollection();
 	m_bottomRegionTabs = new SplitTabWidget(m_bottomRegionCollection);
@@ -687,7 +650,7 @@ Contributions are always welcome! </p>
 		auto loadImageModel = new QStandardItemModel(0, 2, loadImageTable);
 		{
 			connect(
-				cacheBlocksView, &DSCCacheBlocksView::loadDone, [this, loadImageModel, cacheInfo]()
+				cacheBlocksView, &DSCCacheBlocksView::loadDone, [this, loadImageModel]()
 				{
 					for (const auto& img : m_cache->GetImages())
 					{
@@ -706,7 +669,7 @@ Contributions are always welcome! </p>
 		auto loadImageButton = new CustomStyleFlatPushButton();
 		{
 			connect(loadImageButton, &QPushButton::clicked,
-				[this, loadImageTable, cacheInfo, mappingModel, sectionModel](bool) {
+				[this, loadImageTable](bool) {
 					auto selected = loadImageTable->selectionModel()->selectedRows();
 					if (selected.size() == 0)
 					{
@@ -768,8 +731,7 @@ Contributions are always welcome! </p>
 		loadImageTable->setSelectionMode(QAbstractItemView::SingleSelection);
 
 		m_triageTabs->addTab(loadImageWidget, "Images");
-		if (!defaultWidget)
-			defaultWidget = loadImageWidget;
+		defaultWidget = loadImageWidget;
 		m_triageTabs->setCanCloseTab(loadImageWidget, false);
 	} // loadImageTable
 
@@ -851,10 +813,53 @@ Contributions are always welcome! </p>
 		// m_triageTabs->addTab(loadedRegionsWidget, "Loaded Regions");
 	} // loadedRegions
 
-	containerWidget->addWidget(m_bottomRegionTabs);
-
 	m_triageTabs->addTab(cacheInfoWidget, "Cache Info");
 	m_triageTabs->setCanCloseTab(cacheInfoWidget, false);
+
+	// check for alpha popup qsetting
+	QSettings settings;
+
+	QTextBrowser *tb = new QTextBrowser(this);
+	{
+		tb->setOpenExternalLinks(true);
+		auto alphaHtml =
+			R"(
+<h1>Shared Cache Alpha</h1>
+
+<p> This is an experimental alpha release of the Shared Cache view! We are hard at work improving this and adding features, but we wanted
+to make it available for users to experiment with as soon as possible. </p>
+
+<h2> Platforms </h2>
+<dl>
+	<dt> iOS 11-17 </dt><dd> Full Support </dd>
+	<dt> iOS 18 </dt><dd> Partial support, may experience issues -- specifically, Objective-C optimization parsing is not implemented </dd>
+	<dt> macOS x86/arm64e </dt><dd> Partial support, may experience issues </dd>
+</dl>
+
+<p> iOS parsing should work fairly well for now. macOS parsing should be usable, but both are still a work in progress. </p>
+<h2> Getting the latest version of the plugin </h2>
+<p> We frequently release "dev" builds which will contain the latest version of the Shared Cache plugin (and many other things). </p>
+<p> You can find instructions on how to install these builds <a href="https://docs.binary.ninja/guide/index.html#development-branch">here</a>. </p>
+
+<h3> Reading / building the source </h3>
+<p> Like most of our platforms, architectures, debug information parsing, and the entire API and documentation, this plugin is open source. </p>
+<p> You can read the source and find instructions for building it <a href="https://github.com/Vector35/binaryninja-api/tree/dev/view/sharedcache">here</a>. </p>
+<p> Contributions are always welcome! </p>
+)";
+		tb->setHtml(alphaHtml);
+
+		m_triageTabs->addTab(tb, "Shared Cache Alpha");
+		m_triageTabs->setCanCloseTab(tb, false);
+
+	}
+	if (!(settings.contains(QSETTINGS_KEY_ALPHA_POPUP_SEEN) && settings.value(QSETTINGS_KEY_ALPHA_POPUP_SEEN).toBool()))
+	{
+		LogAlert("dyld_shared_cache support is highly experimental! We do not expect it to work on all versions yet! See the 'alpha' tab in the Triage view for more information. ");
+		settings.setValue(QSETTINGS_KEY_ALPHA_POPUP_SEEN, true);
+		defaultWidget = tb;
+	}
+
+	containerWidget->addWidget(m_bottomRegionTabs);
 
 	m_layout = new QVBoxLayout(this);
 	m_layout->addWidget(cacheBlocksView);
@@ -863,9 +868,6 @@ Contributions are always welcome! </p>
 
 	m_triageTabs->selectWidget(defaultWidget);
 }
-
-
-DSCTriageView::~DSCTriageView() {}
 
 
 QFont DSCTriageView::getFont()

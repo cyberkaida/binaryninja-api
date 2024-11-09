@@ -1,21 +1,25 @@
 use log::LevelFilter;
 
+use crate::cache::{
+    register_cache_destructor, ViewID, FUNCTION_CACHE, GUID_CACHE, MATCHED_FUNCTION_CACHE,
+};
+use crate::convert::{to_bn_symbol_at_address, to_bn_type};
+use crate::matcher::{
+    invalidate_function_matcher_cache, Matcher, MatcherSettings, PlatformID, PLAT_MATCHER_CACHE,
+};
+use crate::{build_function, cache};
 use binaryninja::binaryview::{BinaryView, BinaryViewExt};
 use binaryninja::command::{Command, FunctionCommand};
-use binaryninja::function::Function;
+use binaryninja::function::{Function, FunctionUpdateType};
 use binaryninja::rc::Ref;
 use binaryninja::tags::TagType;
+use binaryninja::ObjectDestructor;
 use warp::signature::function::Function as WarpFunction;
 
-use crate::build_function;
-use crate::cache::{ViewID, FUNCTION_CACHE, GUID_CACHE};
-use crate::convert::{to_bn_symbol_at_address, to_bn_type};
-use crate::matcher::{PlatformID, PLAT_MATCHER_CACHE};
-
-mod apply;
 mod copy;
 mod create;
 mod find;
+mod load;
 mod types;
 mod workflow;
 
@@ -33,12 +37,12 @@ fn get_warp_tag_type(view: &BinaryView) -> Ref<TagType> {
 // TODO: Rename to markup_function or something.
 pub fn on_matched_function(function: &Function, matched: &WarpFunction) {
     let view = function.view();
-    view.define_auto_symbol(&to_bn_symbol_at_address(
+    view.define_user_symbol(&to_bn_symbol_at_address(
         &view,
         &matched.symbol,
         function.symbol().address(),
     ));
-    function.set_auto_type(&to_bn_type(&function.arch(), &matched.ty));
+    function.set_user_type(&to_bn_type(&function.arch(), &matched.ty));
     // TODO: Add metadata. (both binja metadata and warp metadata)
     function.add_tag(
         &get_warp_tag_type(&view),
@@ -47,6 +51,8 @@ pub fn on_matched_function(function: &Function, matched: &WarpFunction) {
         true,
         None,
     );
+    // Seems to be the only way to get the analysis update to work correctly.
+    function.mark_updates_required(FunctionUpdateType::FullAutoFunctionUpdate);
 }
 
 struct DebugFunction;
@@ -63,14 +69,46 @@ impl FunctionCommand for DebugFunction {
     }
 }
 
+struct DebugMatcher;
+
+impl FunctionCommand for DebugMatcher {
+    fn action(&self, _view: &BinaryView, function: &Function) {
+        let Ok(llil) = function.low_level_il() else {
+            log::error!("No LLIL for function 0x{:x}", function.start());
+            return;
+        };
+        let platform = function.platform();
+        // Build the matcher every time this is called to make sure we arent in a bad state.
+        let matcher = Matcher::from_platform(platform);
+        let func = build_function(function, &llil);
+        if let Some(possible_matches) = matcher.functions.get(&func.guid) {
+            log::info!("{:#?}", possible_matches.value());
+        } else {
+            log::error!(
+                "No possible matches found for the function 0x{:x}",
+                function.start()
+            );
+        };
+    }
+
+    fn valid(&self, _view: &BinaryView, _function: &Function) -> bool {
+        true
+    }
+}
+
 struct DebugCache;
 
 impl Command for DebugCache {
     fn action(&self, view: &BinaryView) {
-        let function_cache = FUNCTION_CACHE.get_or_init(Default::default);
         let view_id = ViewID::from(view);
+        let function_cache = FUNCTION_CACHE.get_or_init(Default::default);
         if let Some(cache) = function_cache.get(&view_id) {
             log::info!("View functions: {}", cache.cache.len());
+        }
+
+        let matched_function_cache = MATCHED_FUNCTION_CACHE.get_or_init(Default::default);
+        if let Some(cache) = matched_function_cache.get(&view_id) {
+            log::info!("View matched functions: {}", cache.cache.len());
         }
 
         let function_guid_cache = GUID_CACHE.get_or_init(Default::default);
@@ -84,12 +122,24 @@ impl Command for DebugCache {
             if let Some(cache) = plat_cache.get(&platform_id) {
                 log::info!("Platform functions: {}", cache.functions.len());
                 log::info!("Platform types: {}", cache.types.len());
-                log::info!(
-                    "Platform matched functions: {}",
-                    cache.matched_functions.len()
-                );
+                log::info!("Platform settings: {:?}", cache.settings);
             }
         }
+    }
+
+    fn valid(&self, _view: &BinaryView) -> bool {
+        true
+    }
+}
+
+struct DebugInvalidateCache;
+
+impl Command for DebugInvalidateCache {
+    fn action(&self, view: &BinaryView) {
+        invalidate_function_matcher_cache();
+        let destructor = cache::CacheDestructor {};
+        destructor.destruct_view(view);
+        log::info!("Invalidated all WARP caches...");
     }
 
     fn valid(&self, _view: &BinaryView) -> bool {
@@ -100,31 +150,61 @@ impl Command for DebugCache {
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "C" fn CorePluginInit() -> bool {
-    binaryninja::logger::init(LevelFilter::Debug).unwrap();
+    binaryninja::logger::init(LevelFilter::Debug);
 
-    workflow::insert_matcher_workflow();
+    // Register our matcher settings.
+    MatcherSettings::register();
+
+    // Make sure caches are flushed when the views get destructed.
+    register_cache_destructor();
+
+    workflow::insert_workflow();
 
     binaryninja::command::register(
-        "WARP\\Apply Signature File Types",
-        "Load all types from a signature file and ignore functions",
-        types::LoadTypesCommand {},
+        "WARP\\Run Matcher",
+        "Run the matcher manually",
+        workflow::RunMatcher {},
     );
 
     binaryninja::command::register(
-        "WARP\\Debug Cache",
+        "WARP\\Debug\\Cache",
         "Debug cache sizes... because...",
         DebugCache {},
     );
 
+    binaryninja::command::register(
+        "WARP\\Debug\\Invalidate Caches",
+        "Invalidate all WARP caches",
+        DebugInvalidateCache {},
+    );
+
     binaryninja::command::register_for_function(
-        "WARP\\Debug Signature",
+        "WARP\\Debug\\Function Signature",
         "Print the entire signature for the function",
         DebugFunction {},
     );
 
     binaryninja::command::register_for_function(
-        "WARP\\Copy Pattern",
-        "Copy the computed pattern for the function",
+        "WARP\\Debug\\Function Matcher",
+        "Print all possible matches for the function",
+        DebugMatcher {},
+    );
+
+    binaryninja::command::register(
+        "WARP\\Debug\\Apply Signature File Types",
+        "Load all types from a signature file and ignore functions",
+        types::LoadTypes {},
+    );
+
+    binaryninja::command::register(
+        "WARP\\Load Signature File",
+        "Load file into the matcher, this does NOT kick off matcher analysis",
+        load::LoadSignatureFile {},
+    );
+
+    binaryninja::command::register_for_function(
+        "WARP\\Copy Function GUID",
+        "Copy the computed GUID for the function",
         copy::CopyFunctionGUID {},
     );
 
@@ -138,12 +218,6 @@ pub extern "C" fn CorePluginInit() -> bool {
         "WARP\\Generate Signature File",
         "Generates a signature file containing all binary view functions",
         create::CreateSignatureFile {},
-    );
-
-    binaryninja::command::register(
-        "WARP\\Apply Signature File",
-        "Applies a signature file to the current view",
-        apply::ApplySignatureFile {},
     );
 
     true
