@@ -39,6 +39,18 @@ typedef enum ppc_insn_bn {
 	PPC_INS_BN_ENDING
 } ppc_insn_bn;
 
+typedef enum ppc_reg_bn {
+	PPC_REG_BN_GQR0 = PPC_REG_ENDING+1,
+	PPC_REG_BN_GQR1,
+	PPC_REG_BN_GQR2,
+	PPC_REG_BN_GQR3,
+	PPC_REG_BN_GQR4,
+	PPC_REG_BN_GQR5,
+	PPC_REG_BN_GQR6,
+	PPC_REG_BN_GQR7,
+	PPC_REG_BN_ENDING
+} ppc_reg_bn;
+
 /* operand type */
 enum operand_type_t { REG, VAL, LABEL };
 

@@ -96,7 +96,7 @@ int disas_instr_word(uint32_t instr_word, char *buf)
 					printf("reg: %s\n", cs_reg_name(res.handle, op.reg));
 					break;
 				case PPC_OP_IMM:
-					printf("imm: 0x%X\n", op.imm);
+					printf("imm: 0x%llx\n", op.imm);
 					break;
 				case PPC_OP_MEM:
 					printf("mem (%s + %d)\n", cs_reg_name(res.handle, op.mem.base),
@@ -123,8 +123,11 @@ int disas_instr_word(uint32_t instr_word, char *buf)
 	return rc;
 }
 
-void usage()
+void usage(const char* av0)
 {
+	printf("usage: %s [-p] [-q] [-s] [-b] repl/send\n", av0);
+	printf("p for ppc_ps, q for ppc_qpx, s for ppc_spe\n");
+	printf("b for big endian interprettation\n");
 	printf("send argument \"repl\" or \"speed\"\n");
 }
 
@@ -139,7 +142,7 @@ int main(int ac, char **av)
 #define BATCH 10000000
 	opterr = 0;
 
-	while ((c = getopt(ac, av, "qsp")) != -1)
+	while ((c = getopt(ac, av, "qspb")) != -1)
 	{
 		switch (c)
 		{
@@ -152,15 +155,18 @@ int main(int ac, char **av)
 		case 'p':
 			cs_mode_local = CS_MODE_PS;
 			break;
+		case 'b':
+			littleendian = false;
+			break;
 		default:
-			usage();
+			usage(av[0]);
 			goto cleanup;
 		}
 	}
 
 	if (optind >= ac)
 	{
-		usage();
+		usage(av[0]);
 		goto cleanup;
 	}
 

@@ -21,7 +21,7 @@ using namespace BinaryNinja;
 #define OTI_GPR0_ZERO 2048
 
 #define MYLOG(...) while(0);
-//#define MYLOG BinaryNinja::LogDebug
+// #define MYLOG BinaryNinja::LogWarn
 
 static uint32_t genMask(uint32_t mb, uint32_t me)
 {
@@ -454,6 +454,10 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 	struct cs_insn *insn = 0;
 	struct cs_detail *detail = 0;
 	struct cs_ppc *ppc = 0;
+
+	// for ppc_ps
+	ppc_reg_bn gqr_l = (ppc_reg_bn)0;
+	int w_l = 0;
 
 	/* bypass capstone path for *all* branching instructions; capstone
 	 * is too difficult to work with and is outright broken for some
@@ -1703,19 +1707,113 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 		// 	il.AddInstruction(ei2);
 		// 	break;
 
+		// for this one, i guess the easiest thing to do is to summarize it by
+		// the end result. For this instuction to happen, the end result is:
+			// register Fn is stored at Rn.
+		// how do we achieve this result in IL?
+			// had it not had the quantization, we could probably get away with 
+			// a cast and then store.
+
+		case PPC_INS_PSQ_ST:
+			REQUIRE4OPS
+			MYLOG("0x%08x psq_st args f%d r%d[%d] w:%lldd gcqr:%lld\n",
+			  (uint32_t)addr, oper0->reg - PPC_REG_F0, oper1->mem.base - PPC_REG_R0, oper1->mem.disp, oper2->imm, oper3->imm);
+			MYLOG("opcount %d insn pnem %s\n", ppc->op_count, insn->op_str);
+			
+			w_l = oper2->imm;
+
+			// pull paired single
+			ei0 = il.PairedSingle(8, operToIL(il, oper0), 0);
+			ei1 = il.PairedSingle(8, operToIL(il, oper0), 1);
+
+			// convert gqr to a register
+			gqr_l = (ppc_reg_bn)(oper3->imm + PPC_REG_BN_GQR0);
+			oper3->type = PPC_OP_REG;
+			oper3->imm = 0;
+			oper3->reg = (ppc_reg)gqr_l;
+
+			// // first thing is first, quantize! 
+			ei2 = il.Quantize(8, ei0, ei1, operToIL(il, oper3), operToIL(il, oper2));
+
+			// Then store the quantized value
+			ei2 = il.Store(8,
+				operToIL(il, oper1, OTI_GPR0_ZERO),
+				// temporary measure to allow it to resemble the instruction, just oper2il oper0
+				// operToIL(il, oper0)
+				ei2
+			);
+			il.AddInstruction(ei2);
+
+			break;
+
+		case PPC_INS_PSQ_L:
+			REQUIRE4OPS
+			w_l = oper2->imm;
+
+			// pull paired single
+			ei0 = il.PairedSingle(8, operToIL(il, oper0), 0);
+			ei1 = il.PairedSingle(8, operToIL(il, oper0), 1);
+
+			// // convert gqr to a register
+			gqr_l = (ppc_reg_bn)(oper3->imm + PPC_REG_BN_GQR0);
+			oper3->type = PPC_OP_REG;
+			oper3->imm = 0;
+			oper3->reg = (ppc_reg)gqr_l;
+
+			// // first thing is first, dequantize! 
+			ei2 = il.DeQuantize(8, ei0, ei1, operToIL(il, oper3), operToIL(il, oper2));
+
+			// Then store the quantized value
+			ei0 = operToIL(il, oper1, OTI_GPR0_ZERO); // d(rA) or 0
+			ei0 = il.Load(8, ei0);                    // [d(rA)]
+			ei0 = il.SetRegister(8, oper0->reg, ei0); // rD = [d(rA)]
+			il.AddInstruction(ei0);
+
+			break;
+
+		case PPC_INS_FADD:
+		case PPC_INS_FADDS:
+			REQUIRE2OPS
+			ei0 = il.FloatAdd(
+				4,
+				operToIL(il, oper1),
+				operToIL(il, oper2)
+			);
+			ei0 = il.SetRegister(4, oper0->reg, ei0,
+				(ppc->update_cr0) ? IL_FLAGWRITE_CR0_S : 0
+			);
+			il.AddInstruction(ei0);
+			break;
+
+		case PPC_INS_FSUB:
+		case PPC_INS_FSUBS:
+			REQUIRE2OPS
+			ei0 = il.FloatSub(
+				4,
+				operToIL(il, oper1),
+				operToIL(il, oper2)
+			);
+			ei0 = il.SetRegister(4, oper0->reg, ei0,
+				(ppc->update_cr0) ? IL_FLAGWRITE_CR0_S : 0
+			);
+			il.AddInstruction(ei0);
+			break;
+
 		// TODO: high level IL is sometimes assuming incorrect variables, and setting floating points to
 		// 	standard registers.
 		// TODO: high level IL is accidentilly adding an extra subtract operand and assigning it to no one.
 		// TODO: final assignment for the fcmp is whether or not the sub is 0, not greater than 0.
 		case PPC_INS_FCMPU:
 			REQUIRE3OPS
-			ei0 = il.FloatSub(4, operToIL(il, oper1), operToIL(il, oper2), crxToFlagWriteType(oper0->reg));
+			ei0 = il.FloatCompareUnordered(4, operToIL(il, oper1), operToIL(il, oper2));
+			// ei0 = il.FloatSub(4, operToIL(il, oper1), operToIL(il, oper2), crxToFlagWriteType(oper0->reg));
 			il.AddInstruction(ei0);
 			break;
 
 		case PPC_INS_BN_FCMPO:
 			REQUIRE3OPS
-			ei0 = il.FloatSub(4, operToIL(il, oper1), operToIL(il, oper2), crxToFlagWriteType(oper0->reg));
+			ei0 = il.FloatCompareOrdered(4, operToIL(il, oper1), operToIL(il, oper2));
+			// ei0 = il.FloatSub(4, operToIL(il, oper1), operToIL(il, oper2), crxToFlagWriteType(oper0->reg));
 			il.AddInstruction(ei0);
 			break;
 
@@ -1957,8 +2055,6 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 		case PPC_INS_EVSUBIFW:
 		case PPC_INS_EVXOR:
 		case PPC_INS_FABS:
-		case PPC_INS_FADD:
-		case PPC_INS_FADDS:
 		case PPC_INS_FCFID:
 		case PPC_INS_FCFIDS:
 		case PPC_INS_FCFIDU:
@@ -1996,8 +2092,6 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 		case PPC_INS_FSEL:
 		case PPC_INS_FSQRT:
 		case PPC_INS_FSQRTS:
-		case PPC_INS_FSUB:
-		case PPC_INS_FSUBS:
 		case PPC_INS_ICBI:
 		case PPC_INS_ICCCI:
 		case PPC_INS_ISYNC:

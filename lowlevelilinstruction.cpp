@@ -3045,6 +3045,11 @@ ExprId LowLevelILFunction::ExternPointer(size_t size, uint64_t val, uint64_t off
 	return AddExprWithLocation(LLIL_EXTERN_PTR, loc, size, 0, val, offset);
 }
 
+// ExprId LowLevelILFunction::PairedSingle(size_t size, ExprId s, uint32_t index, const ILSourceLocation& loc)
+// {
+// 	return ;
+// }
+
 
 ExprId LowLevelILFunction::FloatConstRaw(size_t size, uint64_t val, const ILSourceLocation& loc)
 {
