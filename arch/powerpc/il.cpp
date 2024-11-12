@@ -1863,6 +1863,7 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 				operToIL(il, oper1),
 				operToIL(il, oper0)
 			);
+			ei0 = il.FloatConvert(4, ei0);
 			il.AddInstruction(ei0);
 			break;
 
@@ -1872,6 +1873,7 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 				operToIL(il, oper1),
 				operToIL(il, oper0)
 			);
+			ei0 = il.FloatConvert(8, ei0);
 			il.AddInstruction(ei0);
 			break;
 
