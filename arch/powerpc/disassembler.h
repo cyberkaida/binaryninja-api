@@ -26,6 +26,9 @@ Then some helpers if you need them:
 #include "capstone/cs_priv.h"
 #include "capstone/ppc.h"
 
+#define PPC_CRX_REG_MASK	0x1ff
+#define PPC_CRX_FLOAT_MASK	0x200
+
 //*****************************************************************************
 // structs and types
 //*****************************************************************************

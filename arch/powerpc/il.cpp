@@ -131,33 +131,42 @@ static ExprId operToIL(LowLevelILFunction &il, struct cs_ppc_op *op,
 /* map PPC_REG_CRX to an IL flagwrite type (a named set of written flags */
 int crxToFlagWriteType(int crx, bool signedComparison = true)
 {
-	/* when we have more flags... */
-	switch(crx)
+	MYLOG("%s() crx:%d", __func__, crx);
+	int flag_out = 0;
+	int crx_local = 0;
+	int crx_type = 0;
+	int crx_index = 0;
+	int suf = 0;
+
+	crx_local = crx & PPC_CRX_REG_MASK;
+	crx_type = crx & PPC_CRX_FLOAT_MASK;
+	if ((crx_local < PPC_REG_CR0) || (crx_local > PPC_REG_CR7))
 	{
-		case PPC_REG_CR0:
-			return signedComparison ? IL_FLAGWRITE_CR0_S : IL_FLAGWRITE_CR0_U;
-		case PPC_REG_CR1:
-			return signedComparison ? IL_FLAGWRITE_CR1_S : IL_FLAGWRITE_CR1_U;
-		case PPC_REG_CR2:
-			return signedComparison ? IL_FLAGWRITE_CR2_S : IL_FLAGWRITE_CR2_U;
-		case PPC_REG_CR3:
-			return signedComparison ? IL_FLAGWRITE_CR3_S : IL_FLAGWRITE_CR3_U;
-		case PPC_REG_CR4:
-			return signedComparison ? IL_FLAGWRITE_CR4_S : IL_FLAGWRITE_CR4_U;
-		case PPC_REG_CR5:
-			return signedComparison ? IL_FLAGWRITE_CR5_S : IL_FLAGWRITE_CR5_U;
-		case PPC_REG_CR6:
-			return signedComparison ? IL_FLAGWRITE_CR6_S : IL_FLAGWRITE_CR6_U;
-		case PPC_REG_CR7:
-			return signedComparison ? IL_FLAGWRITE_CR7_S : IL_FLAGWRITE_CR7_U;
-		default:
-			return 0;
+		goto fail;
 	}
+
+	crx_index = crx_local - PPC_REG_CR0;
+
+	if (crx_type != 0)
+	{
+		suf = PPC_SUF_F;
+	}
+	else if (signedComparison == false)
+	{
+		suf = PPC_SUF_U;
+	}
+
+	/* when we have more flags... */
+	flag_out = (crx_index * PPC_SUF_SZ) + IL_FLAGWRITE_CR0_S + suf;
+	
+fail:
+	return flag_out;
 }
 
 
 static ExprId ExtractConditionClause(LowLevelILFunction& il, uint8_t crBit, bool negate = false)
 {
+	MYLOG("%s() crbit:%x", __func__, crBit);
 	uint32_t flagBase = (crBit / 4) * 10;
 
 	switch (crBit & 3)
@@ -230,6 +239,7 @@ static bool LiftConditionalBranch(LowLevelILFunction& il, uint8_t bo, uint8_t bi
 
 static bool LiftBranches(Architecture* arch, LowLevelILFunction &il, const uint8_t* data, uint64_t addr, bool le)
 {
+	MYLOG("%s() addr:0x%08llx\n", __func__, addr);
 	uint32_t insn = *(const uint32_t *) data;
 
 	if (!le)
@@ -239,7 +249,7 @@ static bool LiftBranches(Architecture* arch, LowLevelILFunction &il, const uint8
 
 	switch (insn >> 26)
 	{
-		case 18: /* b (b, ba, bl, bla) */
+		case PPC_INS_BCA: /* b (b, ba, bl, bla) */
 		{
 			uint32_t target = insn & 0x03fffffc;
 
@@ -275,7 +285,7 @@ static bool LiftBranches(Architecture* arch, LowLevelILFunction &il, const uint8
 
 			break;
 		}
-		case 16: /* bc */
+		case PPC_INS_BA: /* bc */
 		{
 			uint32_t target = insn & 0xfffc;
 			uint8_t bo = (insn >> 21) & 0x1f;
@@ -329,7 +339,7 @@ static bool LiftBranches(Architecture* arch, LowLevelILFunction &il, const uint8
 
 			break;
 		}
-		case 19: /* bcctr, bclr */
+		case PPC_INS_BCCTR: /* bcctr, bclr */
 		{
 			uint8_t bo = (insn >> 21) & 0x1f;
 			uint8_t bi = (insn >> 16) & 0x1f;
@@ -442,6 +452,30 @@ static void ByteReversedStore(LowLevelILFunction &il, struct cs_ppc* ppc, size_t
 	addr = il.Add(4, addr, operToIL(il, &ppc->operands[2]));          // (rA|0) + (rB)
 	ExprId val = ByteReverseRegister(il, ppc->operands[0].reg, size); // rS = swap(rS)
 	il.AddInstruction(il.Store(size, addr, val));                     // [(rA|0) + (rB)] = swap(rS)
+}
+
+static void loadstoreppcfs(LowLevelILFunction& il, int load_store_sz,
+	cs_ppc_op* operand1, /* register that gets read/written */
+	cs_ppc_op* operand2 /* location the read/write occurs */
+	)
+{
+	ExprId tmp;
+	const int addrsz = 4;
+	// assume single
+	if (!load_store_sz)
+		load_store_sz = 4;
+
+	// operand1.reg = [operand2.reg + operand2.imm]
+	if (operand2->mem.disp == 0)
+	{
+		tmp = il.Register(4, operand2->mem.base);
+	}
+	else
+	{
+		tmp = il.Add(addrsz, il.Register(addrsz, operand2->mem.base), il.Const(addrsz, operand2->mem.disp));
+	}
+
+	il.AddInstruction(il.SetRegister(load_store_sz, operand1->reg, (il.Operand(1, il.Load(load_store_sz, tmp)))));
 }
 
 /* returns TRUE - if this IL continues
@@ -1739,8 +1773,8 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 			ei2 = il.Store(8,
 				operToIL(il, oper1, OTI_GPR0_ZERO),
 				// temporary measure to allow it to resemble the instruction, just oper2il oper0
-				// operToIL(il, oper0)
-				ei2
+				operToIL(il, oper0)
+				// ei2
 			);
 			il.AddInstruction(ei2);
 
@@ -1780,7 +1814,7 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 				operToIL(il, oper2)
 			);
 			ei0 = il.SetRegister(4, oper0->reg, ei0,
-				(ppc->update_cr0) ? IL_FLAGWRITE_CR0_S : 0
+				(ppc->update_cr0) ? (IL_FLAGWRITE_CR0_S | PPC_CRX_FLOAT_MASK) : 0
 			);
 			il.AddInstruction(ei0);
 			break;
@@ -1794,27 +1828,28 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 				operToIL(il, oper2)
 			);
 			ei0 = il.SetRegister(4, oper0->reg, ei0,
-				(ppc->update_cr0) ? IL_FLAGWRITE_CR0_S : 0
+				(ppc->update_cr0) ? (IL_FLAGWRITE_CR0_S | PPC_CRX_FLOAT_MASK) : 0
 			);
 			il.AddInstruction(ei0);
 			break;
 
-		// TODO: high level IL is sometimes assuming incorrect variables, and setting floating points to
-		// 	standard registers.
-		// TODO: high level IL is accidentilly adding an extra subtract operand and assigning it to no one.
-		// TODO: final assignment for the fcmp is whether or not the sub is 0, not greater than 0.
+		#define RZF 4
 		case PPC_INS_FCMPU:
 			REQUIRE3OPS
-			ei0 = il.FloatCompareUnordered(4, operToIL(il, oper1), operToIL(il, oper2));
-			// ei0 = il.FloatSub(4, operToIL(il, oper1), operToIL(il, oper2), crxToFlagWriteType(oper0->reg));
-			il.AddInstruction(ei0);
+			ei0 = il.Register(RZF, oper1->reg);
+			ei1 = il.Register(RZF, oper2->reg);
+			ei2 = il.FloatSub(RZF, ei0,
+				ei1, crxToFlagWriteType(oper0->reg | PPC_CRX_FLOAT_MASK));
+			il.AddInstruction(ei2);
 			break;
 
 		case PPC_INS_BN_FCMPO:
 			REQUIRE3OPS
-			ei0 = il.FloatCompareOrdered(4, operToIL(il, oper1), operToIL(il, oper2));
-			// ei0 = il.FloatSub(4, operToIL(il, oper1), operToIL(il, oper2), crxToFlagWriteType(oper0->reg));
-			il.AddInstruction(ei0);
+			ei0 = il.Register(RZF, oper1->reg);
+			ei1 = il.Register(RZF, oper2->reg);
+			ei2 = il.FloatSub(RZF, ei0,
+				ei1, crxToFlagWriteType(oper0->reg | PPC_CRX_FLOAT_MASK));
+			il.AddInstruction(ei2);
 			break;
 
 		case PPC_INS_FMR:
@@ -1842,18 +1877,25 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 
 		case PPC_INS_LFS:
 			REQUIRE2OPS
-			ei0 = operToIL(il, oper1); // d(rA) or 0
-			ei0 = il.Load(4, ei0);                    // [d(rA)]
-			ei0 = il.SetRegister(4, oper0->reg, ei0); // rD = [d(rA)]
-			il.AddInstruction(ei0);
+			// ei0 = operToIL(il, oper1); // d(rA) or 0
+			// ei0 = il.Load(4, ei0);                    // [d(rA)]
+			// ei0 = il.SetRegister(4, oper0->reg, ei0); // rD = [d(rA)]
+			// // ei1 = il.IntToFloat(4, ei0);
+			// il.AddInstruction(ei1);
+
+			// alternatively, do it the way arm64 does it
+			loadstoreppcfs(il, 4, oper0, oper1);
 			break;
 
 		case PPC_INS_LFD:
 			REQUIRE2OPS
-			ei0 = operToIL(il, oper1); // d(rA) or 0
-			ei0 = il.Load(8, ei0);                    // [d(rA)]
-			ei0 = il.SetRegister(8, oper0->reg, ei0); // rD = [d(rA)]
-			il.AddInstruction(ei0);
+			// ei0 = operToIL(il, oper1); // d(rA) or 0
+			// ei0 = il.Load(8, ei0);                    // [d(rA)]
+			// ei0 = il.SetRegister(8, oper0->reg, ei0); // rD = [d(rA)]
+			// il.AddInstruction(ei0);
+
+			// same as lfs
+			loadstoreppcfs(il, 8, oper0, oper1);
 			break;
 
 // =====================================

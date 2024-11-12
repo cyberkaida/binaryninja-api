@@ -6,8 +6,8 @@
 
 #include <binaryninjaapi.h>
 #define MYLOG(...) while(0);
-//#define MYLOG BinaryNinja::LogDebug
-//#define MYLOG printf
+// #define MYLOG BinaryNinja::LogWarn
+// #define MYLOG printf
 
 #include "lowlevelilinstruction.h"
 using namespace BinaryNinja; // for ::LogDebug, etc.
@@ -673,24 +673,15 @@ getil:
 	virtual size_t GetFlagWriteLowLevelIL(BNLowLevelILOperation op, size_t size, uint32_t flagWriteType,
 		uint32_t flag, BNRegisterOrConstant* operands, size_t operandCount, LowLevelILFunction& il) override
 	{
-		MYLOG("%s()\n", __func__);
-
+		MYLOG("%s(), op:%d, flagwritetype:%d, flag:%d\n", __func__, op, flagWriteType, flag);
 		bool signedWrite = true;
 		ExprId left, right;
+		ppc_suf suf = (ppc_suf)0;
+
+		suf = (ppc_suf)((flagWriteType - 1) % PPC_SUF_SZ);
 
 		switch (flagWriteType)
 		{
-			case IL_FLAGWRITE_CR0_U:
-			case IL_FLAGWRITE_CR1_U:
-			case IL_FLAGWRITE_CR2_U:
-			case IL_FLAGWRITE_CR3_U:
-			case IL_FLAGWRITE_CR4_U:
-			case IL_FLAGWRITE_CR5_U:
-			case IL_FLAGWRITE_CR6_U:
-			case IL_FLAGWRITE_CR7_U:
-				signedWrite = false;
-				break;
-
 			case IL_FLAGWRITE_MTCR0:
 			case IL_FLAGWRITE_MTCR1:
 			case IL_FLAGWRITE_MTCR2:
@@ -775,10 +766,12 @@ getil:
 			case IL_FLAG_LT_7:
 				liftOps();
 
-				if (signedWrite)
+				if (suf == PPC_SUF_S)
 					return il.CompareSignedLessThan(size, left, right);
-				else
+				else if (suf == PPC_SUF_U)
 					return il.CompareUnsignedLessThan(size, left, right);
+				else if (suf == PPC_SUF_F)
+					return il.FloatCompareLessThan(size, left, right);
 
 			case IL_FLAG_GT:
 			case IL_FLAG_GT_1:
@@ -790,10 +783,12 @@ getil:
 			case IL_FLAG_GT_7:
 				liftOps();
 
-				if (signedWrite)
+				if (suf == PPC_SUF_S)
 					return il.CompareSignedGreaterThan(size, left, right);
-				else
+				else if (suf == PPC_SUF_U)
 					return il.CompareUnsignedGreaterThan(size, left, right);
+				else if (suf == PPC_SUF_F)
+					return il.FloatCompareGreaterThan(size, left, right);
 
 			case IL_FLAG_EQ:
 			case IL_FLAG_EQ_1:
@@ -804,7 +799,10 @@ getil:
 			case IL_FLAG_EQ_6:
 			case IL_FLAG_EQ_7:
 				liftOps();
-				return il.CompareEqual(size, left, right);
+				if (suf == PPC_SUF_F)
+					return il.FloatCompareEqual(size, left, right);
+				else
+					return il.CompareEqual(size, left, right);
 		}
 
 		BNFlagRole role = GetFlagRole(flag, GetSemanticClassForFlagWriteType(flagWriteType));
@@ -814,6 +812,7 @@ getil:
 
 	virtual ExprId GetSemanticFlagGroupLowLevelIL(uint32_t semGroup, LowLevelILFunction& il) override
 	{
+		MYLOG("%s() semgroup:%d\n", __func__, semGroup);
 		uint32_t flagBase = (semGroup / 10) * 4; // get to flags from the right cr
 
 		switch (semGroup % 10)
@@ -854,7 +853,7 @@ getil:
 	*/
 	virtual vector<uint32_t> GetAllFlags() override
 	{
-		MYLOG("%s()\n", __func__);
+		// MYLOG("%s()\n", __func__);
 		return vector<uint32_t> {
 			IL_FLAG_LT, IL_FLAG_GT, IL_FLAG_EQ, IL_FLAG_SO,
 			IL_FLAG_LT_1, IL_FLAG_GT_1, IL_FLAG_EQ_1, IL_FLAG_SO_1,
@@ -870,7 +869,7 @@ getil:
 
 	virtual string GetFlagName(uint32_t flag) override
 	{
-		MYLOG("%s(%d)\n", __func__, flag);
+		MYLOG("%s() flag:%d\n", __func__, flag);
 
 		switch(powerpc_crx_to_reg(flag)) {
 			case IL_FLAG_LT: return "lt";
@@ -928,6 +927,9 @@ getil:
 			IL_FLAGWRITE_CR0_U, IL_FLAGWRITE_CR1_U, IL_FLAGWRITE_CR2_U, IL_FLAGWRITE_CR3_U,
 			IL_FLAGWRITE_CR4_U, IL_FLAGWRITE_CR5_U, IL_FLAGWRITE_CR6_U, IL_FLAGWRITE_CR7_U,
 
+			IL_FLAGWRITE_CR0_F, IL_FLAGWRITE_CR1_F, IL_FLAGWRITE_CR2_F, IL_FLAGWRITE_CR3_F,
+			IL_FLAGWRITE_CR4_F, IL_FLAGWRITE_CR5_F, IL_FLAGWRITE_CR6_F, IL_FLAGWRITE_CR7_F,
+
 			IL_FLAGWRITE_XER, IL_FLAGWRITE_XER_CA, IL_FLAGWRITE_XER_OV_SO,
 
 			IL_FLAGWRITE_MTCR0, IL_FLAGWRITE_MTCR1, IL_FLAGWRITE_MTCR2, IL_FLAGWRITE_MTCR3,
@@ -942,7 +944,7 @@ getil:
 
 	virtual string GetFlagWriteTypeName(uint32_t writeType) override
 	{
-		MYLOG("%s(%d)\n", __func__, writeType);
+		MYLOG("%s() writeType:%d\n", __func__, writeType);
 
 		switch (writeType)
 		{
@@ -979,6 +981,23 @@ getil:
 				return "cr6_unsigned";
 			case IL_FLAGWRITE_CR7_U:
 				return "cr7_unsigned";
+
+			case IL_FLAGWRITE_CR0_F:
+				return "cr0_float";
+			case IL_FLAGWRITE_CR1_F:
+				return "cr1_float";
+			case IL_FLAGWRITE_CR2_F:
+				return "cr2_float";
+			case IL_FLAGWRITE_CR3_F:
+				return "cr3_floatt";
+			case IL_FLAGWRITE_CR4_F:
+				return "cr4_float";
+			case IL_FLAGWRITE_CR5_F:
+				return "cr5_float";
+			case IL_FLAGWRITE_CR6_F:
+				return "cr6_float";
+			case IL_FLAGWRITE_CR7_F:
+				return "cr7_float";
 
 			case IL_FLAGWRITE_XER:
 				return "xer";
@@ -1032,12 +1051,13 @@ getil:
 
 	virtual vector<uint32_t> GetFlagsWrittenByFlagWriteType(uint32_t writeType) override
 	{
-		MYLOG("%s(%d)\n", __func__, writeType);
+		MYLOG("%s() writeType:%d\n", __func__, writeType);
 
 		switch (writeType)
 		{
 			case IL_FLAGWRITE_CR0_S:
 			case IL_FLAGWRITE_CR0_U:
+			case IL_FLAGWRITE_CR0_F:
 			case IL_FLAGWRITE_MTCR0:
 			case IL_FLAGWRITE_INVL0:
 				return vector<uint32_t> {
@@ -1046,6 +1066,7 @@ getil:
 
 			case IL_FLAGWRITE_CR1_S:
 			case IL_FLAGWRITE_CR1_U:
+			case IL_FLAGWRITE_CR1_F:
 			case IL_FLAGWRITE_MTCR1:
 			case IL_FLAGWRITE_INVL1:
 				return vector<uint32_t> {
@@ -1054,6 +1075,7 @@ getil:
 
 			case IL_FLAGWRITE_CR2_S:
 			case IL_FLAGWRITE_CR2_U:
+			case IL_FLAGWRITE_CR2_F:
 			case IL_FLAGWRITE_MTCR2:
 			case IL_FLAGWRITE_INVL2:
 				return vector<uint32_t> {
@@ -1062,6 +1084,7 @@ getil:
 
 			case IL_FLAGWRITE_CR3_S:
 			case IL_FLAGWRITE_CR3_U:
+			case IL_FLAGWRITE_CR3_F:
 			case IL_FLAGWRITE_MTCR3:
 			case IL_FLAGWRITE_INVL3:
 				return vector<uint32_t> {
@@ -1070,6 +1093,7 @@ getil:
 
 			case IL_FLAGWRITE_CR4_S:
 			case IL_FLAGWRITE_CR4_U:
+			case IL_FLAGWRITE_CR4_F:
 			case IL_FLAGWRITE_MTCR4:
 			case IL_FLAGWRITE_INVL4:
 				return vector<uint32_t> {
@@ -1078,6 +1102,7 @@ getil:
 
 			case IL_FLAGWRITE_CR5_S:
 			case IL_FLAGWRITE_CR5_U:
+			case IL_FLAGWRITE_CR5_F:
 			case IL_FLAGWRITE_MTCR5:
 			case IL_FLAGWRITE_INVL5:
 				return vector<uint32_t> {
@@ -1086,6 +1111,7 @@ getil:
 
 			case IL_FLAGWRITE_CR6_S:
 			case IL_FLAGWRITE_CR6_U:
+			case IL_FLAGWRITE_CR6_F:
 			case IL_FLAGWRITE_MTCR6:
 			case IL_FLAGWRITE_INVL6:
 				return vector<uint32_t> {
@@ -1094,6 +1120,7 @@ getil:
 
 			case IL_FLAGWRITE_CR7_S:
 			case IL_FLAGWRITE_CR7_U:
+			case IL_FLAGWRITE_CR7_F:
 			case IL_FLAGWRITE_MTCR7:
 			case IL_FLAGWRITE_INVL7:
 				return vector<uint32_t> {
@@ -1124,27 +1151,19 @@ getil:
 	}
 	virtual uint32_t GetSemanticClassForFlagWriteType(uint32_t writeType) override
 	{
-		switch (writeType)
-		{
-			case IL_FLAGWRITE_CR0_S: return IL_FLAGCLASS_CR0_S;
-			case IL_FLAGWRITE_CR0_U: return IL_FLAGCLASS_CR0_U;
-			case IL_FLAGWRITE_CR1_S: return IL_FLAGCLASS_CR1_S;
-			case IL_FLAGWRITE_CR1_U: return IL_FLAGCLASS_CR1_U;
-			case IL_FLAGWRITE_CR2_S: return IL_FLAGCLASS_CR2_S;
-			case IL_FLAGWRITE_CR2_U: return IL_FLAGCLASS_CR2_U;
-			case IL_FLAGWRITE_CR3_S: return IL_FLAGCLASS_CR3_S;
-			case IL_FLAGWRITE_CR3_U: return IL_FLAGCLASS_CR3_U;
-			case IL_FLAGWRITE_CR4_S: return IL_FLAGCLASS_CR4_S;
-			case IL_FLAGWRITE_CR4_U: return IL_FLAGCLASS_CR4_U;
-			case IL_FLAGWRITE_CR5_S: return IL_FLAGCLASS_CR5_S;
-			case IL_FLAGWRITE_CR5_U: return IL_FLAGCLASS_CR5_U;
-			case IL_FLAGWRITE_CR6_S: return IL_FLAGCLASS_CR6_S;
-			case IL_FLAGWRITE_CR6_U: return IL_FLAGCLASS_CR6_U;
-			case IL_FLAGWRITE_CR7_S: return IL_FLAGCLASS_CR7_S;
-			case IL_FLAGWRITE_CR7_U: return IL_FLAGCLASS_CR7_U;
-		}
+		MYLOG("%s() writetype:%d", __func__, writeType);
+		uint32_t flag_out = 0;
 
-		return IL_FLAGCLASS_NONE;
+		if ((writeType < IL_FLAGWRITE_CR0_S) || (writeType > IL_FLAGWRITE_CR7_F))
+		{
+			flag_out = IL_FLAGCLASS_NONE;
+		}
+		else
+		{
+			flag_out = IL_FLAGCLASS_CR0_S + (writeType - IL_FLAGWRITE_CR0_S);
+		}
+		
+		return flag_out;
 	}
 
 	/*
@@ -1160,6 +1179,9 @@ getil:
 
 			IL_FLAGCLASS_CR0_U, IL_FLAGCLASS_CR1_U, IL_FLAGCLASS_CR2_U, IL_FLAGCLASS_CR3_U,
 			IL_FLAGCLASS_CR4_U, IL_FLAGCLASS_CR5_U, IL_FLAGCLASS_CR6_U, IL_FLAGCLASS_CR7_U,
+
+			IL_FLAGCLASS_CR0_F, IL_FLAGCLASS_CR1_F, IL_FLAGCLASS_CR2_F, IL_FLAGCLASS_CR3_F,
+			IL_FLAGCLASS_CR4_F, IL_FLAGCLASS_CR5_F, IL_FLAGCLASS_CR6_F, IL_FLAGCLASS_CR7_F,
 		};
 	}
 
@@ -1225,7 +1247,9 @@ getil:
 
 	virtual std::map<uint32_t, BNLowLevelILFlagCondition> GetFlagConditionsForSemanticFlagGroup(uint32_t semGroup) override
 	{
-		uint32_t flagClassBase = IL_FLAGCLASS_CR0_S + ((semGroup / 10) * 2);
+		MYLOG("%s() semgroup:%d", __func__, semGroup);
+		
+		uint32_t flagClassBase = IL_FLAGCLASS_CR0_S + ((semGroup / 10) * PPC_SUF_SZ);
 		uint32_t groupType = semGroup % 10;
 
 		switch (groupType)
@@ -1233,32 +1257,38 @@ getil:
 		case IL_FLAGGROUP_CR0_LT:
 			return map<uint32_t, BNLowLevelILFlagCondition> {
 				{flagClassBase    , LLFC_SLT},
-				{flagClassBase + 1, LLFC_ULT}
+				{flagClassBase + PPC_SUF_U, LLFC_ULT},
+				{flagClassBase + PPC_SUF_F, LLFC_FLT},
 			};
 		case IL_FLAGGROUP_CR0_LE:
 			return map<uint32_t, BNLowLevelILFlagCondition> {
 				{flagClassBase    , LLFC_SLE},
-				{flagClassBase + 1, LLFC_ULE}
+				{flagClassBase + PPC_SUF_U, LLFC_ULE},
+				{flagClassBase + PPC_SUF_F, LLFC_FLE}
 			};
 		case IL_FLAGGROUP_CR0_GT:
 			return map<uint32_t, BNLowLevelILFlagCondition> {
 				{flagClassBase    , LLFC_SGT},
-				{flagClassBase + 1, LLFC_UGT}
+				{flagClassBase + PPC_SUF_U, LLFC_UGT},
+				{flagClassBase + PPC_SUF_F, LLFC_FGT}
 			};
 		case IL_FLAGGROUP_CR0_GE:
 			return map<uint32_t, BNLowLevelILFlagCondition> {
 				{flagClassBase    , LLFC_SGE},
-				{flagClassBase + 1, LLFC_UGE}
+				{flagClassBase + PPC_SUF_U, LLFC_UGE},
+				{flagClassBase + PPC_SUF_F, LLFC_FGE}
 			};
 		case IL_FLAGGROUP_CR0_EQ:
 			return map<uint32_t, BNLowLevelILFlagCondition> {
 				{flagClassBase    , LLFC_E},
-				{flagClassBase + 1, LLFC_E}
+				{flagClassBase + PPC_SUF_U, LLFC_E},
+				{flagClassBase + PPC_SUF_F, LLFC_FE}
 			};
 		case IL_FLAGGROUP_CR0_NE:
 			return map<uint32_t, BNLowLevelILFlagCondition> {
 				{flagClassBase    , LLFC_NE},
-				{flagClassBase + 1, LLFC_NE}
+				{flagClassBase + PPC_SUF_U, LLFC_NE},
+				{flagClassBase + PPC_SUF_F, LLFC_FNE}
 			};
 		default:
 			return map<uint32_t, BNLowLevelILFlagCondition>();
@@ -1271,22 +1301,11 @@ getil:
 
 	virtual BNFlagRole GetFlagRole(uint32_t flag, uint32_t semClass) override
 	{
-		MYLOG("%s(%d)\n", __func__, flag);
+		MYLOG("%s() flag:%d, semclass:%d\n", __func__, flag, semClass);
 
-		bool signedClass = true;
+		ppc_suf suf = (ppc_suf)0;
 
-		switch (semClass)
-		{
-			case IL_FLAGCLASS_CR0_U:
-			case IL_FLAGCLASS_CR1_U:
-			case IL_FLAGCLASS_CR2_U:
-			case IL_FLAGCLASS_CR3_U:
-			case IL_FLAGCLASS_CR4_U:
-			case IL_FLAGCLASS_CR5_U:
-			case IL_FLAGCLASS_CR6_U:
-			case IL_FLAGCLASS_CR7_U:
-				signedClass = false;
-		}
+		suf = (ppc_suf)((semClass - 1) % PPC_SUF_SZ);
 
 		switch (flag)
 		{
@@ -1298,7 +1317,7 @@ getil:
 			case IL_FLAG_LT_5:
 			case IL_FLAG_LT_6:
 			case IL_FLAG_LT_7:
-				return signedClass ? NegativeSignFlagRole : SpecialFlagRole;
+				return (suf == PPC_SUF_S) ? NegativeSignFlagRole : SpecialFlagRole;
 			case IL_FLAG_GT:
 			case IL_FLAG_GT_1:
 			case IL_FLAG_GT_2:
@@ -1341,24 +1360,30 @@ getil:
 	*/
 	virtual vector<uint32_t> GetFlagsRequiredForFlagCondition(BNLowLevelILFlagCondition cond, uint32_t) override
 	{
-		MYLOG("%s(%d)\n", __func__, cond);
+		MYLOG("%s() cond:%d\n", __func__, cond);
 
 		switch (cond)
 		{
 			case LLFC_E: /* equal */
 			case LLFC_NE: /* not equal */
+			case LLFC_FE:
+			case LLFC_FNE:
 				return vector<uint32_t>{ IL_FLAG_EQ };
 
 			case LLFC_ULT: /* (unsigned) less than == LT */
 			case LLFC_SLT: /* (signed) less than == LT */
 			case LLFC_SGE: /* (signed) greater-or-equal == !LT */
 			case LLFC_UGE: /* (unsigned) greater-or-equal == !LT */
+			case LLFC_FLT:
+			case LLFC_FGE:
 				return vector<uint32_t>{ IL_FLAG_LT };
 
 			case LLFC_SGT: /* (signed) greater-than == GT */
 			case LLFC_UGT: /* (unsigned) greater-than == GT */
 			case LLFC_ULE: /* (unsigned) less-or-equal == !GT */
 			case LLFC_SLE: /* (signed) lesser-or-equal == !GT */
+			case LLFC_FGT:
+			case LLFC_FLE:
 				return vector<uint32_t>{ IL_FLAG_GT };
 
 			case LLFC_NEG:
@@ -1391,7 +1416,7 @@ getil:
 
 	virtual vector<uint32_t> GetFullWidthRegisters() override
 	{
-		MYLOG("%s()\n", __func__);
+		// MYLOG("%s()\n", __func__);
 
 		return vector<uint32_t>{
 			PPC_REG_R0,   PPC_REG_R1,   PPC_REG_R2,   PPC_REG_R3,   PPC_REG_R4,   PPC_REG_R5,   PPC_REG_R6,   PPC_REG_R7,
