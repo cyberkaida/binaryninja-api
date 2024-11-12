@@ -475,7 +475,7 @@ static void loadstoreppcfs(LowLevelILFunction& il, int load_store_sz,
 		tmp = il.Add(addrsz, il.Register(addrsz, operand2->mem.base), il.Const(addrsz, operand2->mem.disp));
 	}
 
-	il.AddInstruction(il.SetRegister(load_store_sz, operand1->reg, (il.Operand(1, il.Load(load_store_sz, tmp)))));
+	il.AddInstruction(il.SetRegister(load_store_sz, operand1->reg, il.FloatConvert(load_store_sz, il.Operand(1, il.Load(load_store_sz, tmp)))));
 }
 
 /* returns TRUE - if this IL continues
