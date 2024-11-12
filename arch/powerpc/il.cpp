@@ -1814,7 +1814,7 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 				operToIL(il, oper2)
 			);
 			ei0 = il.SetRegister(4, oper0->reg, ei0,
-				(ppc->update_cr0) ? (IL_FLAGWRITE_CR0_S | PPC_CRX_FLOAT_MASK) : 0
+				(ppc->update_cr0) ? IL_FLAGWRITE_CR0_F : 0
 			);
 			il.AddInstruction(ei0);
 			break;
@@ -1828,7 +1828,7 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 				operToIL(il, oper2)
 			);
 			ei0 = il.SetRegister(4, oper0->reg, ei0,
-				(ppc->update_cr0) ? (IL_FLAGWRITE_CR0_S | PPC_CRX_FLOAT_MASK) : 0
+				(ppc->update_cr0) ? IL_FLAGWRITE_CR0_F : 0
 			);
 			il.AddInstruction(ei0);
 			break;
