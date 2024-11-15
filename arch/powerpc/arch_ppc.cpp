@@ -2500,13 +2500,6 @@ extern "C"
 
 		BinaryViewType::RegisterArchitecture(
 			"ELF", /* name of the binary view type */
-			EM_PPC, /* id (key in m_arch map) */
-			BigEndian,
-			ppc_ps /* the architecture */
-		);
-
-		BinaryViewType::RegisterArchitecture(
-			"ELF", /* name of the binary view type */
 			EM_PPC64, /* id (key in m_arch map) */
 			BigEndian,
 			ppc64 /* the architecture */
