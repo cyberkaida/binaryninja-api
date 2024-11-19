@@ -1748,63 +1748,6 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 			// had it not had the quantization, we could probably get away with 
 			// a cast and then store.
 
-		case PPC_INS_PSQ_ST:
-			REQUIRE4OPS
-			MYLOG("0x%08x psq_st args f%d r%d[%d] w:%lldd gcqr:%lld\n",
-			  (uint32_t)addr, oper0->reg - PPC_REG_F0, oper1->mem.base - PPC_REG_R0, oper1->mem.disp, oper2->imm, oper3->imm);
-			MYLOG("opcount %d insn pnem %s\n", ppc->op_count, insn->op_str);
-			
-			w_l = oper2->imm;
-
-			// pull paired single
-			ei0 = il.PairedSingle(8, operToIL(il, oper0), 0);
-			ei1 = il.PairedSingle(8, operToIL(il, oper0), 1);
-
-			// convert gqr to a register
-			gqr_l = (ppc_reg_bn)(oper3->imm + PPC_REG_BN_GQR0);
-			oper3->type = PPC_OP_REG;
-			oper3->imm = 0;
-			oper3->reg = (ppc_reg)gqr_l;
-
-			// // first thing is first, quantize! 
-			ei2 = il.Quantize(8, ei0, ei1, operToIL(il, oper3), operToIL(il, oper2));
-
-			// Then store the quantized value
-			ei2 = il.Store(8,
-				operToIL(il, oper1, OTI_GPR0_ZERO),
-				// temporary measure to allow it to resemble the instruction, just oper2il oper0
-				operToIL(il, oper0)
-				// ei2
-			);
-			il.AddInstruction(ei2);
-
-			break;
-
-		case PPC_INS_PSQ_L:
-			REQUIRE4OPS
-			w_l = oper2->imm;
-
-			// pull paired single
-			ei0 = il.PairedSingle(8, operToIL(il, oper0), 0);
-			ei1 = il.PairedSingle(8, operToIL(il, oper0), 1);
-
-			// // convert gqr to a register
-			gqr_l = (ppc_reg_bn)(oper3->imm + PPC_REG_BN_GQR0);
-			oper3->type = PPC_OP_REG;
-			oper3->imm = 0;
-			oper3->reg = (ppc_reg)gqr_l;
-
-			// // first thing is first, dequantize! 
-			ei2 = il.DeQuantize(8, ei0, ei1, operToIL(il, oper3), operToIL(il, oper2));
-
-			// Then store the quantized value
-			ei0 = operToIL(il, oper1, OTI_GPR0_ZERO); // d(rA) or 0
-			ei0 = il.Load(8, ei0);                    // [d(rA)]
-			ei0 = il.SetRegister(8, oper0->reg, ei0); // rD = [d(rA)]
-			il.AddInstruction(ei0);
-
-			break;
-
 		case PPC_INS_FADD:
 		case PPC_INS_FADDS:
 			REQUIRE2OPS
@@ -1861,9 +1804,9 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 			REQUIRE2OPS
 			ei0 = il.Store(4,
 				operToIL(il, oper1),
-				operToIL(il, oper0)
+				il.FloatConvert(4, operToIL(il, oper0))
 			);
-			ei0 = il.FloatConvert(4, ei0);
+			// ei0 = il.FloatConvert(4, ei0);
 			il.AddInstruction(ei0);
 			break;
 
@@ -1871,9 +1814,9 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 			REQUIRE2OPS
 			ei0 = il.Store(8,
 				operToIL(il, oper1),
-				operToIL(il, oper0)
+				il.FloatConvert(8, operToIL(il, oper0))
 			);
-			ei0 = il.FloatConvert(8, ei0);
+			// ei0 = il.FloatConvert(8, ei0);
 			il.AddInstruction(ei0);
 			break;
 
@@ -1900,6 +1843,69 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 			loadstoreppcfs(il, 8, oper0, oper1);
 			break;
 
+		case PPC_INS_CNTLZW:
+	// 		il.AddInstruction(il.Intrinsic(
+	// 			{RegisterOrFlag::Register((operand1).reg[0])}, ARM64_INTRIN_CLZ, {ExtractRegister(il, operand2, 0, get_register_size((operand2).reg[0]), false, get_register_size((operand2).reg[0]))
+	// }));
+	// 		break;
+		case PPC_INS_PSQ_ST:
+			// REQUIRE4OPS
+			// MYLOG("0x%08x psq_st args f%d r%d[%d] w:%lldd gcqr:%lld\n",
+			//   (uint32_t)addr, oper0->reg - PPC_REG_F0, oper1->mem.base - PPC_REG_R0, oper1->mem.disp, oper2->imm, oper3->imm);
+			// MYLOG("opcount %d insn pnem %s\n", ppc->op_count, insn->op_str);
+			
+			// w_l = oper2->imm;
+
+			// // pull paired single
+			// ei0 = il.PairedSingle(8, operToIL(il, oper0), 0);
+			// ei1 = il.PairedSingle(8, operToIL(il, oper0), 1);
+
+			// // convert gqr to a register
+			// gqr_l = (ppc_reg_bn)(oper3->imm + PPC_REG_BN_GQR0);
+			// oper3->type = PPC_OP_REG;
+			// oper3->imm = 0;
+			// oper3->reg = (ppc_reg)gqr_l;
+
+			// // // first thing is first, quantize! 
+			// ei2 = il.Quantize(8, ei0, ei1, operToIL(il, oper3), operToIL(il, oper2));
+
+			// // Then store the quantized value
+			// ei2 = il.Store(8,
+			// 	operToIL(il, oper1, OTI_GPR0_ZERO),
+			// 	// temporary measure to allow it to resemble the instruction, just oper2il oper0
+			// 	operToIL(il, oper0)
+			// 	// ei2
+			// );
+			// il.AddInstruction(ei2);
+
+			// break;
+
+		case PPC_INS_PSQ_L:
+			// REQUIRE4OPS
+			// w_l = oper2->imm;
+
+			// // pull paired single
+			// ei0 = il.PairedSingle(8, operToIL(il, oper0), 0);
+			// ei1 = il.PairedSingle(8, operToIL(il, oper0), 1);
+
+			// // // convert gqr to a register
+			// gqr_l = (ppc_reg_bn)(oper3->imm + PPC_REG_BN_GQR0);
+			// oper3->type = PPC_OP_REG;
+			// oper3->imm = 0;
+			// oper3->reg = (ppc_reg)gqr_l;
+
+			// // // first thing is first, dequantize! 
+			// ei2 = il.DeQuantize(8, ei0, ei1, operToIL(il, oper3), operToIL(il, oper2));
+
+			// // Then store the quantized value
+			// ei0 = operToIL(il, oper1, OTI_GPR0_ZERO); // d(rA) or 0
+			// ei0 = il.Load(8, ei0);                    // [d(rA)]
+			// ei0 = il.SetRegister(8, oper0->reg, ei0); // rD = [d(rA)]
+			// il.AddInstruction(ei0);
+
+			// break;
+
+
 // =====================================
 // =====TO BE DEFINED INSTRUCTIONS======
 // =====================================
@@ -1908,7 +1914,6 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 		case PPC_INS_BCLR:
 		case PPC_INS_BCLRL:
 		case PPC_INS_CNTLZD:
-		case PPC_INS_CNTLZW:
 		case PPC_INS_DCBA:
 		case PPC_INS_DCBF:
 		case PPC_INS_DCBI:
