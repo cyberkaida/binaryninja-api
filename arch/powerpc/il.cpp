@@ -1,3 +1,4 @@
+#include "lowlevelilinstruction.h"
 #include <binaryninjaapi.h>
 
 #include "disassembler.h"
@@ -31,8 +32,12 @@ static uint32_t genMask(uint32_t mb, uint32_t me)
 	return (mb <= me) ? (maskBegin & maskEnd) : (maskBegin | maskEnd);
 }
 
+#define PPC_IL_OPTIONS_DEFAULT	0
+#define PPC_IL_EXTRA_DEFAULT	0
+#define RZF 4
+
 static ExprId operToIL(LowLevelILFunction &il, struct cs_ppc_op *op,
-	int options=0, uint64_t extra=0)
+	int options=PPC_IL_OPTIONS_DEFAULT, uint64_t extra=PPC_IL_EXTRA_DEFAULT, size_t regsz=4)
 {
 	ExprId res;
 
@@ -45,26 +50,26 @@ static ExprId operToIL(LowLevelILFunction &il, struct cs_ppc_op *op,
 		case PPC_OP_REG:
 			//MYLOG("case PPC_OP_REG returning reg %d\n", op->reg);
 			if (options & OTI_GPR0_ZERO && op->reg == PPC_REG_R0)
-				res = il.Const(4, 0);
+				res = il.Const(regsz, 0);
 			else
-				res = il.Register(4, op->reg);
+				res = il.Register(regsz, op->reg);
 			break;
 		case PPC_OP_IMM:
 			/* the immediate is a constant pointer (eg: absolute address) */
 			if(options & OTI_IMM_CPTR) {
-				res = il.ConstPointer(4, op->imm);
+				res = il.ConstPointer(regsz, op->imm);
 			}
 			/* the immediate is a displacement (eg: relative addressing) */
 			else if(options & OTI_IMM_REL_CPTR) {
-				res = il.ConstPointer(4, op->imm + extra);
+				res = il.ConstPointer(regsz, op->imm + extra);
 			}
 			/* the immediate should be biased with given value */
 			else if(options & OTI_IMM_BIAS) {
-				res = il.Const(4, op->imm + extra);
+				res = il.Const(regsz, op->imm + extra);
 			}
 			/* the immediate is just a plain boring immediate */
 			else {
-				res = il.Const(4, op->imm);
+				res = il.Const(regsz, op->imm);
 			}
 			break;
 
@@ -72,14 +77,14 @@ static ExprId operToIL(LowLevelILFunction &il, struct cs_ppc_op *op,
 			//MYLOG("case PPC_OP_MEM returning regs (%d,%d)\n", op->mem.base, op->mem.disp);
 
 			if (options & OTI_GPR0_ZERO && op->mem.base == PPC_REG_R0)
-				res = il.Const(4, 0);
+				res = il.Const(regsz, 0);
 			else
-				res = il.Register(4, op->mem.base);
+				res = il.Register(regsz, op->mem.base);
 
 			if(options & OTI_IMM_BIAS)
-				res = il.Add(4, res, il.Const(4, op->mem.disp + extra));
+				res = il.Add(regsz, res, il.Const(4, op->mem.disp + extra));
 			else
-				res = il.Add(4, res, il.Const(4, op->mem.disp));
+				res = il.Add(regsz, res, il.Const(4, op->mem.disp));
 			break;
 
 		case PPC_OP_CRX:
@@ -1733,56 +1738,57 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 // =====================================
 // =====FLOATING POINT INSTRUCTIONS=====
 // =====================================
-		// case PPC_INS_FCMPO: /* compare (signed) word(32-bit) */
-		// 	REQUIRE2OPS
-		// 	ei0 = operToIL(il, oper2 ? oper1 : oper0);
-		// 	ei1 = operToIL(il, oper2 ? oper2 : oper1);
-		// 	ei2 = il.Sub(4, ei0, ei1, crxToFlagWriteType(oper2 ? oper0->reg : PPC_REG_CR0));
-		// 	il.AddInstruction(ei2);
-		// 	break;
 
-		// for this one, i guess the easiest thing to do is to summarize it by
-		// the end result. For this instuction to happen, the end result is:
-			// register Fn is stored at Rn.
-		// how do we achieve this result in IL?
-			// had it not had the quantization, we could probably get away with 
-			// a cast and then store.
+		// case PPC_INS_FCMPO: /* compare (signed) word(32-bit) */
+		    // 	REQUIRE2OPS
+		    // 	ei0 = operToIL(il, oper2 ? oper1 : oper0);
+		    // 	ei1 = operToIL(il, oper2 ? oper2 : oper1);
+		    // 	ei2 = il.Sub(4, ei0, ei1, crxToFlagWriteType(oper2 ? oper0->reg : PPC_REG_CR0));
+		    // 	il.AddInstruction(ei2);
+		    // 	break;
+
+			// for this one, i guess the easiest thing to do is to summarize it by
+		    // the end result. For this instuction to happen, the end result is:
+		    // register Fn is stored at Rn.
+			// how do we achieve this result in IL?
+		    // had it not had the quantization, we could probably get away with
+		    // a cast and then store.
 
 		case PPC_INS_FADD:
+			REQUIRE3OPS
+			ei0 = il.FloatAdd(8, operToIL(il, oper1, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 8),
+				operToIL(il, oper2, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 8));
+			ei0 = il.SetRegister(8, oper0->reg, ei0, (ppc->update_cr0) ? IL_FLAGWRITE_CR0_F : 0);
+			il.AddInstruction(ei0);
+			break;
+
 		case PPC_INS_FADDS:
-			REQUIRE2OPS
-			ei0 = il.FloatAdd(
-				4,
-				operToIL(il, oper1),
-				operToIL(il, oper2)
-			);
-			ei0 = il.SetRegister(4, oper0->reg, ei0,
-				(ppc->update_cr0) ? IL_FLAGWRITE_CR0_F : 0
-			);
+			REQUIRE3OPS
+			ei0 = il.FloatAdd(4, operToIL(il, oper1), operToIL(il, oper2));
+			ei0 = il.SetRegister(4, oper0->reg, ei0, (ppc->update_cr0) ? IL_FLAGWRITE_CR0_F : 0);
 			il.AddInstruction(ei0);
 			break;
 
 		case PPC_INS_FSUB:
-		case PPC_INS_FSUBS:
-			REQUIRE2OPS
-			ei0 = il.FloatSub(
-				4,
-				operToIL(il, oper1),
-				operToIL(il, oper2)
-			);
-			ei0 = il.SetRegister(4, oper0->reg, ei0,
-				(ppc->update_cr0) ? IL_FLAGWRITE_CR0_F : 0
-			);
+			REQUIRE3OPS
+			ei0 = il.FloatSub(8, operToIL(il, oper1, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 8),
+				operToIL(il, oper2, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 8));
+			ei0 = il.SetRegister(8, oper0->reg, ei0, (ppc->update_cr0) ? IL_FLAGWRITE_CR0_F : 0);
 			il.AddInstruction(ei0);
 			break;
 
-		#define RZF 4
+		case PPC_INS_FSUBS:
+			REQUIRE3OPS
+			ei0 = il.FloatSub(4, operToIL(il, oper1), operToIL(il, oper2));
+			ei0 = il.SetRegister(4, oper0->reg, ei0, (ppc->update_cr0) ? IL_FLAGWRITE_CR0_F : 0);
+			il.AddInstruction(ei0);
+			break;
+
 		case PPC_INS_FCMPU:
 			REQUIRE3OPS
 			ei0 = il.Register(RZF, oper1->reg);
 			ei1 = il.Register(RZF, oper2->reg);
-			ei2 = il.FloatSub(RZF, ei0,
-				ei1, crxToFlagWriteType(oper0->reg | PPC_CRX_FLOAT_MASK));
+			ei2 = il.FloatSub(RZF, ei0, ei1, crxToFlagWriteType(oper0->reg | PPC_CRX_FLOAT_MASK));
 			il.AddInstruction(ei2);
 			break;
 
@@ -1790,32 +1796,27 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 			REQUIRE3OPS
 			ei0 = il.Register(RZF, oper1->reg);
 			ei1 = il.Register(RZF, oper2->reg);
-			ei2 = il.FloatSub(RZF, ei0,
-				ei1, crxToFlagWriteType(oper0->reg | PPC_CRX_FLOAT_MASK));
+			ei2 = il.FloatSub(RZF, ei0, ei1, crxToFlagWriteType(oper0->reg | PPC_CRX_FLOAT_MASK));
 			il.AddInstruction(ei2);
 			break;
 
 		case PPC_INS_FMR:
 			REQUIRE2OPS
-			il.AddInstruction(il.SetRegister(4, oper0->reg, operToIL(il, oper1)));
+			ei0 = il.SetRegister(8, oper0->reg, operToIL(il, oper1, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 8));
+			il.AddInstruction(ei0);
 			break;
 
 		case PPC_INS_STFS:
 			REQUIRE2OPS
-			ei0 = il.Store(4,
-				operToIL(il, oper1),
-				il.FloatConvert(4, operToIL(il, oper0))
-			);
+			ei0 = il.Store(4, operToIL(il, oper1), il.FloatConvert(4, operToIL(il, oper0)));
 			// ei0 = il.FloatConvert(4, ei0);
 			il.AddInstruction(ei0);
 			break;
 
 		case PPC_INS_STFD:
 			REQUIRE2OPS
-			ei0 = il.Store(8,
-				operToIL(il, oper1),
-				il.FloatConvert(8, operToIL(il, oper0))
-			);
+			ei0 = il.Store(8, operToIL(il, oper1),
+				il.FloatConvert(8, operToIL(il, oper0, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 8)));
 			// ei0 = il.FloatConvert(8, ei0);
 			il.AddInstruction(ei0);
 			break;
@@ -1823,10 +1824,10 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 		case PPC_INS_LFS:
 			REQUIRE2OPS
 			// ei0 = operToIL(il, oper1); // d(rA) or 0
-			// ei0 = il.Load(4, ei0);                    // [d(rA)]
-			// ei0 = il.SetRegister(4, oper0->reg, ei0); // rD = [d(rA)]
-			// // ei1 = il.IntToFloat(4, ei0);
-			// il.AddInstruction(ei1);
+		    // ei0 = il.Load(4, ei0);                    // [d(rA)]
+		    // ei0 = il.SetRegister(4, oper0->reg, ei0); // rD = [d(rA)]
+		    // // ei1 = il.IntToFloat(4, ei0);
+		    // il.AddInstruction(ei1);
 
 			// alternatively, do it the way arm64 does it
 			loadstoreppcfs(il, 4, oper0, oper1);
@@ -1835,80 +1836,283 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 		case PPC_INS_LFD:
 			REQUIRE2OPS
 			// ei0 = operToIL(il, oper1); // d(rA) or 0
-			// ei0 = il.Load(8, ei0);                    // [d(rA)]
-			// ei0 = il.SetRegister(8, oper0->reg, ei0); // rD = [d(rA)]
-			// il.AddInstruction(ei0);
+		    // ei0 = il.Load(8, ei0);                    // [d(rA)]
+		    // ei0 = il.SetRegister(8, oper0->reg, ei0); // rD = [d(rA)]
+		    // il.AddInstruction(ei0);
 
 			// same as lfs
 			loadstoreppcfs(il, 8, oper0, oper1);
 			break;
 
+		case PPC_INS_FMUL:
+			REQUIRE3OPS
+			ei0 = il.MultDoublePrecSigned(8, operToIL(il, oper1, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 8),
+				operToIL(il, oper2, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 8));
+			ei1 = il.SetRegister(8, oper0->reg, ei0, (ppc->update_cr0) ? IL_FLAGWRITE_CR0_F : 0);
+			il.AddInstruction(ei1);
+			break;
+
+		case PPC_INS_FMULS:
+			REQUIRE3OPS
+			ei0 = il.FloatMult(4, operToIL(il, oper1), operToIL(il, oper2));
+			ei1 = il.SetRegister(4, oper0->reg, ei0, (ppc->update_cr0) ? IL_FLAGWRITE_CR0_F : 0);
+			il.AddInstruction(ei1);
+			break;
+
+		case PPC_INS_FDIV:
+			REQUIRE3OPS
+			ei0 = il.DivDoublePrecSigned(8, operToIL(il, oper1, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 8),
+				operToIL(il, oper2, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 8));
+			ei1 = il.SetRegister(8, oper0->reg, ei0, (ppc->update_cr0) ? IL_FLAGWRITE_CR0_F : 0);
+			il.AddInstruction(ei1);
+			break;
+
+		case PPC_INS_FDIVS:
+			REQUIRE3OPS
+			ei0 = il.FloatDiv(4, operToIL(il, oper1), operToIL(il, oper2));
+			ei1 = il.SetRegister(4, oper0->reg, ei0, (ppc->update_cr0) ? IL_FLAGWRITE_CR0_F : 0);
+			il.AddInstruction(ei1);
+			break;
+
+		case PPC_INS_FMADD:
+			REQUIRE4OPS
+			ei0 = il.MultDoublePrecSigned(8, operToIL(il, oper1, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 8),
+				operToIL(il, oper3, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 8));
+			ei0 = il.FloatAdd(8, ei0, operToIL(il, oper2, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 8));
+			ei1 = il.SetRegister(8, oper0->reg, ei0, (ppc->update_cr0) ? IL_FLAGWRITE_CR0_F : 0);
+			il.AddInstruction(ei1);
+			break;
+
+		case PPC_INS_FMADDS:
+			REQUIRE4OPS
+			ei0 = il.FloatMult(4, operToIL(il, oper1), operToIL(il, oper3), (ppc->update_cr0) ? IL_FLAGWRITE_CR0_F : 0);
+			ei0 = il.FloatAdd(4, ei0, operToIL(il, oper2), (ppc->update_cr0) ? IL_FLAGWRITE_CR0_F : 0);
+			ei1 = il.SetRegister(4, oper0->reg, ei0);
+			il.AddInstruction(ei1);
+			break;
+
+		case PPC_INS_FMSUB:
+			REQUIRE4OPS
+			ei0 = il.MultDoublePrecSigned(8, operToIL(il, oper1, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 8),
+				operToIL(il, oper3, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 8));
+			ei0 = il.FloatSub(8, ei0, operToIL(il, oper2, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 8));
+			ei1 = il.SetRegister(8, oper0->reg, ei0, (ppc->update_cr0) ? IL_FLAGWRITE_CR0_F : 0);
+			il.AddInstruction(ei1);
+			break;
+
+		case PPC_INS_FMSUBS:
+			REQUIRE4OPS
+			ei0 = il.FloatMult(4, operToIL(il, oper1), operToIL(il, oper3));
+			ei0 = il.FloatSub(4, ei0, operToIL(il, oper2));
+			ei1 = il.SetRegister(4, oper0->reg, ei0, (ppc->update_cr0) ? IL_FLAGWRITE_CR0_F : 0);
+			il.AddInstruction(ei1);
+			break;
+
+		// this is a weird one, its described as round a float to an int towards 0, then set
+		// bits 32-63 of a double reg to that result, ignoring the lower 32 bits 0-31.
+		// TODO: needs further testing to verify that this is functional, and verify that the
+		// method used was correct, as well as the registers afffected, like FPSCR.
+		case PPC_INS_FCTIWZ:
+			REQUIRE2OPS
+			ei0 = il.FloatTrunc(RZF, operToIL(il, oper1));
+			ei1 = il.Const(4, 32);
+			ei2 = il.ShiftLeft(8, ei0, ei1);
+			ei0 = il.SetRegister(8, oper0->reg, ei2, (ppc->update_cr0) ? IL_FLAGWRITE_CR0_F : 0);
+			il.AddInstruction(ei0);
+			break;
+
+		case PPC_INS_FNEG:
+			REQUIRE2OPS
+			ei0 = il.FloatNeg(4, operToIL(il, oper1));
+			ei0 = il.SetRegister(4, oper0->reg, ei0, (ppc->update_cr0) ? IL_FLAGWRITE_CR0_F : 0);
+			il.AddInstruction(ei0);
+			break;
+
+		case PPC_INS_FNMADD:
+			REQUIRE4OPS
+			ei0 = il.MultDoublePrecSigned(8, operToIL(il, oper1, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 8),
+				operToIL(il, oper3, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 8));
+			ei0 = il.FloatAdd(8, ei0, operToIL(il, oper2, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 8));
+			ei0 = il.FloatNeg(8, ei0);
+			ei1 = il.SetRegister(8, oper0->reg, ei0, (ppc->update_cr0) ? IL_FLAGWRITE_CR0_F : 0);
+			il.AddInstruction(ei1);
+			break;
+
+		case PPC_INS_FNMADDS:
+			REQUIRE4OPS
+			ei0 = il.FloatMult(4, operToIL(il, oper1), operToIL(il, oper3), (ppc->update_cr0) ? IL_FLAGWRITE_CR0_F : 0);
+			ei0 = il.FloatAdd(4, ei0, operToIL(il, oper2), (ppc->update_cr0) ? IL_FLAGWRITE_CR0_F : 0);
+			ei0 = il.FloatNeg(4, ei0);
+			ei1 = il.SetRegister(4, oper0->reg, ei0);
+			il.AddInstruction(ei1);
+			break;
+
+		case PPC_INS_FNMSUB:
+			REQUIRE4OPS
+			ei0 = il.MultDoublePrecSigned(8, operToIL(il, oper1, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 8),
+				operToIL(il, oper3, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 8));
+			ei0 = il.FloatSub(8, ei0, operToIL(il, oper2, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 8));
+			ei0 = il.FloatNeg(8, ei0);
+			ei1 = il.SetRegister(8, oper0->reg, ei0, (ppc->update_cr0) ? IL_FLAGWRITE_CR0_F : 0);
+			il.AddInstruction(ei1);
+			break;
+
+		case PPC_INS_FNMSUBS:
+			REQUIRE4OPS
+			ei0 = il.FloatMult(4, operToIL(il, oper1), operToIL(il, oper3));
+			ei0 = il.FloatSub(4, ei0, operToIL(il, oper2));
+			ei0 = il.FloatNeg(4, ei0);
+			ei1 = il.SetRegister(4, oper0->reg, ei0, (ppc->update_cr0) ? IL_FLAGWRITE_CR0_F : 0);
+			il.AddInstruction(ei1);
+			break;
+
+		case PPC_INS_FABS:
+			REQUIRE2OPS
+			ei0 = il.FloatAbs(4, operToIL(il, oper1));
+			ei1 = il.SetRegister(4, oper0->reg, ei0, (ppc->update_cr0) ? IL_FLAGWRITE_CR0_F : 0);
+			il.AddInstruction(ei1);
+			break;
+
+		case PPC_INS_FNABS:
+			REQUIRE2OPS
+			ei0 = il.FloatAbs(4, operToIL(il, oper1));
+			ei0 = il.FloatNeg(4, ei0);
+			ei1 = il.SetRegister(4, oper0->reg, ei0, (ppc->update_cr0) ? IL_FLAGWRITE_CR0_F : 0);
+			il.AddInstruction(ei1);
+			break;
+
+		// TODO: needs more testing to make sure that stuff is good. the decompilation is a
+		// little rough, seems to be making the const double 1 into an int by default,
+		// gonna have to figure out how if its right and FPSCR is correct.
+		case PPC_INS_FRSQRTE:
+			REQUIRE2OPS
+			ei0 = il.FloatConstDouble(1);
+			ei1 = il.FloatSqrt(8, operToIL(il, oper1, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 8));
+			ei1 = il.DivDoublePrecSigned(8, ei0, ei1);
+			ei1 = il.SetRegister(8, oper0->reg, ei1, (ppc->update_cr0) ? IL_FLAGWRITE_CR0_F : 0);
+			il.AddInstruction(ei1);
+			break;
+
+		case PPC_INS_FRSQRTES:
+			REQUIRE2OPS
+			ei0 = il.FloatConstSingle(1);
+			ei1 = il.FloatSqrt(4, operToIL(il, oper1, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 8));
+			ei1 = il.FloatDiv(4, ei0, ei1);
+			ei1 = il.SetRegister(4, oper0->reg, ei1, (ppc->update_cr0) ? IL_FLAGWRITE_CR0_F : 0);
+			il.AddInstruction(ei1);
+			break;
+
 		case PPC_INS_CNTLZW:
-	// 		il.AddInstruction(il.Intrinsic(
-	// 			{RegisterOrFlag::Register((operand1).reg[0])}, ARM64_INTRIN_CLZ, {ExtractRegister(il, operand2, 0, get_register_size((operand2).reg[0]), false, get_register_size((operand2).reg[0]))
-	// }));
-	// 		break;
+			ei0 = il.Intrinsic({RegisterOrFlag::Register(oper1->reg)}, PPC_INTRIN_CNTLZW,
+				{operToIL(il, oper0)});
+			il.AddInstruction(ei0);
+			break;
+
 		case PPC_INS_PSQ_ST:
-			// REQUIRE4OPS
-			// MYLOG("0x%08x psq_st args f%d r%d[%d] w:%lldd gcqr:%lld\n",
-			//   (uint32_t)addr, oper0->reg - PPC_REG_F0, oper1->mem.base - PPC_REG_R0, oper1->mem.disp, oper2->imm, oper3->imm);
-			// MYLOG("opcount %d insn pnem %s\n", ppc->op_count, insn->op_str);
-			
+			REQUIRE4OPS
+		    MYLOG("0x%08x psq_st args f%d r%d[%d] w:%lldd gcqr:%lld\n",
+		      (uint32_t)addr, oper0->reg - PPC_REG_F0, oper1->mem.base - PPC_REG_R0, oper1->mem.disp, oper2->imm,
+		      oper3->imm);
+		    MYLOG("opcount %d insn pnem %s\n", ppc->op_count, insn->op_str);
+
 			// w_l = oper2->imm;
 
+			// if (w_l == 0)
+			// {
+
+			// }
+			// else if (w_l == 1)
+			// {
+			// 	ei0 = operToIL(il, oper0);
+			// 	ei0 = il.Intrinsic();
+
+			// 	// Then store the quantized value
+			// 	ei2 = il.Store(8, operToIL(il, oper1, OTI_GPR0_ZERO),
+			// 		// temporary measure to allow it to resemble the instruction, just oper2il oper0
+			// 		operToIL(il, oper0)
+			// 		// ei2
+			// 	);
+			// 	il.AddInstruction(ei2);
+			// }
 			// // pull paired single
 			// ei0 = il.PairedSingle(8, operToIL(il, oper0), 0);
 			// ei1 = il.PairedSingle(8, operToIL(il, oper0), 1);
 
 			// // convert gqr to a register
-			// gqr_l = (ppc_reg_bn)(oper3->imm + PPC_REG_BN_GQR0);
-			// oper3->type = PPC_OP_REG;
-			// oper3->imm = 0;
-			// oper3->reg = (ppc_reg)gqr_l;
+		    // gqr_l = (ppc_reg_bn)(oper3->imm + PPC_REG_BN_GQR0);
+		    // oper3->type = PPC_OP_REG;
+		    // oper3->imm = 0;
+		    // oper3->reg = (ppc_reg)gqr_l;
 
-			// // // first thing is first, quantize! 
-			// ei2 = il.Quantize(8, ei0, ei1, operToIL(il, oper3), operToIL(il, oper2));
+			// // // first thing is first, quantize!
+		    // ei2 = il.Quantize(8, ei0, ei1, operToIL(il, oper3), operToIL(il, oper2));
 
-			// // Then store the quantized value
-			// ei2 = il.Store(8,
-			// 	operToIL(il, oper1, OTI_GPR0_ZERO),
-			// 	// temporary measure to allow it to resemble the instruction, just oper2il oper0
-			// 	operToIL(il, oper0)
-			// 	// ei2
-			// );
-			// il.AddInstruction(ei2);
+			ei0 = il.Intrinsic(
+				{RegisterOrFlag::Register(oper0->reg)},
+				// {},
+				PPC_INTRIN_QUANTIZE,
+				{operToIL(il, oper0, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 8)}
+				);
 
-			// break;
+			il.AddInstruction(ei0);
+
+			// ei0 = il.SetRegister(8, oper0->reg, ei0);
+
+			// Then store the quantized value
+			ei0 = il.Store(8, operToIL(il, oper1),
+				// temporary measure to allow it to resemble the instruction, just oper2il oper0
+		        // ei0
+				operToIL(il, oper0, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 8)
+				// ei2
+			);
+			il.AddInstruction(ei0);
+
+			break;
 
 		case PPC_INS_PSQ_L:
-			// REQUIRE4OPS
-			// w_l = oper2->imm;
+			REQUIRE4OPS
+		    // w_l = oper2->imm;
 
 			// // pull paired single
-			// ei0 = il.PairedSingle(8, operToIL(il, oper0), 0);
-			// ei1 = il.PairedSingle(8, operToIL(il, oper0), 1);
+		    // ei0 = il.PairedSingle(8, operToIL(il, oper0), 0);
+		    // ei1 = il.PairedSingle(8, operToIL(il, oper0), 1);
 
 			// // // convert gqr to a register
-			// gqr_l = (ppc_reg_bn)(oper3->imm + PPC_REG_BN_GQR0);
-			// oper3->type = PPC_OP_REG;
-			// oper3->imm = 0;
-			// oper3->reg = (ppc_reg)gqr_l;
+		    // gqr_l = (ppc_reg_bn)(oper3->imm + PPC_REG_BN_GQR0);
+		    // oper3->type = PPC_OP_REG;
+		    // oper3->imm = 0;
+		    // oper3->reg = (ppc_reg)gqr_l;
 
-			// // // first thing is first, dequantize! 
-			// ei2 = il.DeQuantize(8, ei0, ei1, operToIL(il, oper3), operToIL(il, oper2));
+			// // // first thing is first, dequantize!
+		    // ei2 = il.DeQuantize(8, ei0, ei1, operToIL(il, oper3), operToIL(il, oper2));
 
 			// // Then store the quantized value
-			// ei0 = operToIL(il, oper1, OTI_GPR0_ZERO); // d(rA) or 0
-			// ei0 = il.Load(8, ei0);                    // [d(rA)]
-			// ei0 = il.SetRegister(8, oper0->reg, ei0); // rD = [d(rA)]
-			// il.AddInstruction(ei0);
+		    // ei0 = operToIL(il, oper1, OTI_GPR0_ZERO); // d(rA) or 0
+		    // ei0 = il.Load(8, ei0);                    // [d(rA)]
+		    // ei0 = il.SetRegister(8, oper0->reg, ei0); // rD = [d(rA)]
+		    // il.AddInstruction(ei0);
 
-			// break;
+		    ei0 = il.Load(8, operToIL(il, oper1));                    // [d(rA)]
+			ei0 = il.Intrinsic(
+				{RegisterOrFlag::Register(oper0->reg)},
+				// {},
+				PPC_INTRIN_DEQUANTIZE,
+				{ei0}
+				);
+
+		    // ei0 = il.SetRegister(8, oper0->reg, il.Operand(8, ei0)); // rD = [d(rA)]
+
+			il.AddInstruction(ei0);
+
+		    // il.AddInstruction(ei0);
+			break;
+
+		case PPC_INS_FRSP:
 
 
-// =====================================
-// =====TO BE DEFINED INSTRUCTIONS======
-// =====================================
+			// =====================================
+		    // =====TO BE DEFINED INSTRUCTIONS======
+		    // =====================================
 
 		case PPC_INS_BCL:
 		case PPC_INS_BCLR:
@@ -2103,7 +2307,6 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 		case PPC_INS_EVSUBFW:
 		case PPC_INS_EVSUBIFW:
 		case PPC_INS_EVXOR:
-		case PPC_INS_FABS:
 		case PPC_INS_FCFID:
 		case PPC_INS_FCFIDS:
 		case PPC_INS_FCFIDU:
@@ -2114,30 +2317,12 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 		case PPC_INS_FCTIDZ:
 		case PPC_INS_FCTIW:
 		case PPC_INS_FCTIWUZ:
-		case PPC_INS_FCTIWZ:
-		case PPC_INS_FDIV:
-		case PPC_INS_FDIVS:
-		case PPC_INS_FMADD:
-		case PPC_INS_FMADDS:
-		case PPC_INS_FMSUB:
-		case PPC_INS_FMSUBS:
-		case PPC_INS_FMUL:
-		case PPC_INS_FMULS:
-		case PPC_INS_FNABS:
-		case PPC_INS_FNEG:
-		case PPC_INS_FNMADD:
-		case PPC_INS_FNMADDS:
-		case PPC_INS_FNMSUB:
-		case PPC_INS_FNMSUBS:
 		case PPC_INS_FRE:
 		case PPC_INS_FRES:
 		case PPC_INS_FRIM:
 		case PPC_INS_FRIN:
 		case PPC_INS_FRIP:
 		case PPC_INS_FRIZ:
-		case PPC_INS_FRSP:
-		case PPC_INS_FRSQRTE:
-		case PPC_INS_FRSQRTES:
 		case PPC_INS_FSEL:
 		case PPC_INS_FSQRT:
 		case PPC_INS_FSQRTS:

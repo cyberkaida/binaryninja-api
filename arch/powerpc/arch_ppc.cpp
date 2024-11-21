@@ -639,6 +639,79 @@ class PowerpcArchitecture: public Architecture
 		return rc;
 	}
 
+	virtual string GetIntrinsicName(uint32_t intrinsic) override
+	{
+		switch (intrinsic)
+		{
+		case PPC_INTRIN_QUANTIZE:
+			return "quantize";
+		case PPC_INTRIN_DEQUANTIZE:
+			return "dequantize";
+		case PPC_INTRIN_CNTLZW:
+			return "__builtin_clz";
+		default:
+			break;
+		}
+
+		return "";
+	}
+
+
+	virtual std::vector<uint32_t> GetAllIntrinsics() override
+	{
+		// Highest intrinsic number currently is ARM64_INTRIN_NEON_END.
+		// If new extensions are added please update this code.
+		std::vector<uint32_t> result{PPC_INTRIN_END};
+
+		// Double check someone didn't insert a new intrinsic at the beginning of our enum since we rely
+		// on it to fill the next array.
+		static_assert(PPCIntrinsic::PPC_INTRIN_QUANTIZE == 0,
+			"Invalid first PPCIntrinsic value. Please add your intrinsic further in the enum.");
+
+		// Normal intrinsics.
+		for (uint32_t id = PPC_INTRIN_QUANTIZE; id < PPCIntrinsic::PPC_INTRIN_END; id++) {
+			result.push_back(id);
+		}
+
+		// consider populating with separate architecture stuff, like ppc_ps stuff or something
+		return result;
+	}
+
+
+	virtual vector<NameAndType> GetIntrinsicInputs(uint32_t intrinsic) override
+	{
+		switch (intrinsic)
+		{
+		case PPC_INTRIN_CNTLZW:		// rs
+			return {NameAndType(Type::IntegerType(4, false))};
+		case PPC_INTRIN_QUANTIZE:
+		case PPC_INTRIN_DEQUANTIZE:
+			return {NameAndType(Type::IntegerType(8, false))};
+		default:
+			break;
+		}
+
+		return vector<NameAndType>();
+	}
+
+
+	virtual vector<Confidence<Ref<Type>>> GetIntrinsicOutputs(uint32_t intrinsic) override
+	{
+		switch (intrinsic)
+		{
+		case PPC_INTRIN_CNTLZW:		// ra
+			return {Type::IntegerType(4, false)};
+		case PPC_INTRIN_QUANTIZE:
+		case PPC_INTRIN_DEQUANTIZE:
+			return {Type::IntegerType(8, false)};
+		default:
+			break;
+		}
+
+		return vector<Confidence<Ref<Type>>>();
+	}
+
+
 	virtual bool GetInstructionLowLevelIL(const uint8_t* data, uint64_t addr, size_t& len, LowLevelILFunction& il) override
 	{
 		bool rc = false;
