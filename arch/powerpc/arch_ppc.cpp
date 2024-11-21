@@ -1533,7 +1533,10 @@ getil:
 			PPC_REG_VS32, PPC_REG_VS33, PPC_REG_VS34, PPC_REG_VS35, PPC_REG_VS36, PPC_REG_VS37, PPC_REG_VS38, PPC_REG_VS39,
 			PPC_REG_VS40, PPC_REG_VS41, PPC_REG_VS42, PPC_REG_VS43, PPC_REG_VS44, PPC_REG_VS45, PPC_REG_VS46, PPC_REG_VS47,
 			PPC_REG_VS48, PPC_REG_VS49, PPC_REG_VS50, PPC_REG_VS51, PPC_REG_VS52, PPC_REG_VS53, PPC_REG_VS54, PPC_REG_VS55,
-			PPC_REG_VS56, PPC_REG_VS57, PPC_REG_VS58, PPC_REG_VS59, PPC_REG_VS60, PPC_REG_VS61, PPC_REG_VS62, PPC_REG_VS63
+			PPC_REG_VS56, PPC_REG_VS57, PPC_REG_VS58, PPC_REG_VS59, PPC_REG_VS60, PPC_REG_VS61, PPC_REG_VS62, PPC_REG_VS63,
+
+			PPC_REG_BN_GQR0, PPC_REG_BN_GQR1, PPC_REG_BN_GQR2, PPC_REG_BN_GQR3, PPC_REG_BN_GQR4, PPC_REG_BN_GQR5,
+			PPC_REG_BN_GQR6, PPC_REG_BN_GQR7
 		};
 
 		return result;
@@ -1730,6 +1733,14 @@ getil:
 			case PPC_REG_VS61: return RegisterInfo(PPC_REG_VS61, 0, 4);
 			case PPC_REG_VS62: return RegisterInfo(PPC_REG_VS62, 0, 4);
 			case PPC_REG_VS63: return RegisterInfo(PPC_REG_VS63, 0, 4);
+			case PPC_REG_BN_GQR0: return RegisterInfo(PPC_REG_BN_GQR0, 0, 4);
+			case PPC_REG_BN_GQR1: return RegisterInfo(PPC_REG_BN_GQR1, 0, 4);
+			case PPC_REG_BN_GQR2: return RegisterInfo(PPC_REG_BN_GQR2, 0, 4);
+			case PPC_REG_BN_GQR3: return RegisterInfo(PPC_REG_BN_GQR3, 0, 4);
+			case PPC_REG_BN_GQR4: return RegisterInfo(PPC_REG_BN_GQR4, 0, 4);
+			case PPC_REG_BN_GQR5: return RegisterInfo(PPC_REG_BN_GQR5, 0, 4);
+			case PPC_REG_BN_GQR6: return RegisterInfo(PPC_REG_BN_GQR6, 0, 4);
+			case PPC_REG_BN_GQR7: return RegisterInfo(PPC_REG_BN_GQR7, 0, 4);
 			default:
 				//LogError("%s(%d == \"%s\") invalid argument", __func__,
 				//  regId, powerpc_reg_to_str(regId));

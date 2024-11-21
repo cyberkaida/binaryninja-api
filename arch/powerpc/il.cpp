@@ -2051,7 +2051,7 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 				{RegisterOrFlag::Register(oper0->reg)},
 				// {},
 				PPC_INTRIN_QUANTIZE,
-				{operToIL(il, oper0, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 8)}
+				{operToIL(il, oper0, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 8), il.Const(4, oper3->imm)}
 				);
 
 			il.AddInstruction(ei0);
@@ -2097,7 +2097,7 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 				{RegisterOrFlag::Register(oper0->reg)},
 				// {},
 				PPC_INTRIN_DEQUANTIZE,
-				{ei0}
+				{ei0, operToIL(il, oper0), il.Const(4, oper3->imm)}
 				);
 
 		    // ei0 = il.SetRegister(8, oper0->reg, il.Operand(8, ei0)); // rD = [d(rA)]
