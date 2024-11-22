@@ -1,10 +1,12 @@
-#include "rtti.h"
+#include "microsoft.h"
 
 using namespace BinaryNinja;
+using namespace BinaryNinja::RTTI;
+using namespace BinaryNinja::RTTI::Microsoft;
 
 constexpr int COL_SIG_REV0 = 0;
 constexpr int COL_SIG_REV1 = 1;
-constexpr int RTTI_CONFIDENCE = 100;
+constexpr const char *TYPE_SOURCE_MICROSOFT = "rtti_microsoft";
 
 
 ClassHierarchyDescriptor::ClassHierarchyDescriptor(BinaryView *view, uint64_t address)
@@ -298,77 +300,6 @@ Ref<Type> TypeDescriptorType(BinaryView *view, uint64_t length)
 }
 
 
-Ref<Metadata> ClassInfo::SerializedMetadata()
-{
-    std::map<std::string, Ref<Metadata> > classInfoMeta;
-    classInfoMeta["className"] = new Metadata(className);
-    if (baseClassName.has_value())
-        classInfoMeta["baseClassName"] = new Metadata(baseClassName.value());
-    if (classOffset.has_value())
-        classInfoMeta["classOffset"] = new Metadata(classOffset.value());
-    if (vft.has_value())
-        classInfoMeta["vft"] = vft->SerializedMetadata();
-    // NOTE: We omit baseVft as it can be resolved manually and just bloats the size.
-    return new Metadata(classInfoMeta);
-}
-
-
-ClassInfo ClassInfo::DeserializedMetadata(const Ref<Metadata> &metadata)
-{
-    std::map<std::string, Ref<Metadata> > classInfoMeta = metadata->GetKeyValueStore();
-    ClassInfo info = {classInfoMeta["className"]->GetString()};
-    if (classInfoMeta.find("baseClassName") != classInfoMeta.end())
-        info.baseClassName = classInfoMeta["baseClassName"]->GetString();
-    if (classInfoMeta.find("classOffset") != classInfoMeta.end())
-        info.classOffset = classInfoMeta["classOffset"]->GetUnsignedInteger();
-    if (classInfoMeta.find("vft") != classInfoMeta.end())
-        info.vft = VirtualFunctionTableInfo::DeserializedMetadata(classInfoMeta["vft"]);
-    return info;
-}
-
-
-Ref<Metadata> VirtualFunctionTableInfo::SerializedMetadata()
-{
-    std::vector<Ref<Metadata> > funcsMeta;
-    funcsMeta.reserve(virtualFunctions.size());
-    for (auto &vFunc: virtualFunctions)
-        funcsMeta.emplace_back(vFunc.SerializedMetadata());
-    std::map<std::string, Ref<Metadata> > vftMeta;
-    vftMeta["address"] = new Metadata(address);
-    vftMeta["functions"] = new Metadata(funcsMeta);
-    return new Metadata(vftMeta);
-}
-
-
-VirtualFunctionTableInfo VirtualFunctionTableInfo::DeserializedMetadata(const Ref<Metadata> &metadata)
-{
-    std::map<std::string, Ref<Metadata> > vftMeta = metadata->GetKeyValueStore();
-    VirtualFunctionTableInfo vftInfo = {vftMeta["address"]->GetUnsignedInteger()};
-    if (vftMeta.find("functions") != vftMeta.end())
-    {
-        for (auto &entry: vftMeta["functions"]->GetArray())
-            vftInfo.virtualFunctions.emplace_back(VirtualFunctionInfo::DeserializedMetadata(entry));
-    }
-    return vftInfo;
-}
-
-
-Ref<Metadata> VirtualFunctionInfo::SerializedMetadata()
-{
-    std::map<std::string, Ref<Metadata> > vFuncMeta;
-    vFuncMeta["address"] = new Metadata(funcAddr);
-    return new Metadata(vFuncMeta);
-}
-
-
-VirtualFunctionInfo VirtualFunctionInfo::DeserializedMetadata(const Ref<Metadata> &metadata)
-{
-    std::map<std::string, Ref<Metadata> > vFuncMeta = metadata->GetKeyValueStore();
-    VirtualFunctionInfo vFuncInfo = {vFuncMeta["address"]->GetUnsignedInteger()};
-    return vFuncInfo;
-}
-
-
 Ref<Metadata> MicrosoftRTTIProcessor::SerializedMetadata()
 {
     std::map<std::string, Ref<Metadata> > classesMeta;
@@ -398,28 +329,6 @@ void MicrosoftRTTIProcessor::DeserializedMetadata(const Ref<Metadata> &metadata)
 }
 
 
-std::optional<std::string> MicrosoftRTTIProcessor::DemangleName(const std::string &mangledName)
-{
-    QualifiedName demangledName = {};
-    Ref<Type> outType = {};
-    if (!DemangleMS(m_view->GetDefaultArchitecture(), mangledName, outType, demangledName, true))
-    {
-        // Try to use LLVM demangler.
-        if (!DemangleLLVM(mangledName, demangledName, true))
-            return allowMangledClassNames ? std::optional(mangledName) : std::nullopt;
-        auto demangledNameStr = demangledName.GetString();
-        size_t beginFind = demangledNameStr.find_first_of(' ');
-        if (beginFind != std::string::npos)
-            demangledNameStr.erase(0, beginFind + 1);
-        size_t endFind = demangledNameStr.find(" `RTTI Type Descriptor Name'");
-        if (endFind != std::string::npos)
-            demangledNameStr.erase(endFind, demangledNameStr.length());
-        return demangledNameStr;
-    }
-    return demangledName.GetString();
-}
-
-
 std::optional<ClassInfo> MicrosoftRTTIProcessor::ProcessRTTI(uint64_t coLocatorAddr)
 {
     // Get complete object locator then check to see if its valid.
@@ -437,7 +346,7 @@ std::optional<ClassInfo> MicrosoftRTTIProcessor::ProcessRTTI(uint64_t coLocatorA
     // Get type descriptor then check to see if the class name was demangled.
     auto typeDescAddr = resolveAddr(coLocator->pTypeDescriptor);
     auto typeDesc = TypeDescriptor(m_view, typeDescAddr);
-    auto className = DemangleName(typeDesc.name);
+    auto className = DemangleNameMS(m_view, allowMangledClassNames, typeDesc.name);
     if (!className.has_value())
         return std::nullopt;
 
@@ -472,7 +381,7 @@ std::optional<ClassInfo> MicrosoftRTTIProcessor::ProcessRTTI(uint64_t coLocatorA
 
         auto baseClassTypeDescAddr = resolveAddr(baseClassDesc.pTypeDescriptor);
         auto baseClassTypeDesc = TypeDescriptor(m_view, baseClassTypeDescAddr);
-        auto baseClassName = DemangleName(baseClassTypeDesc.name);
+        auto baseClassName = DemangleNameMS(m_view, allowMangledClassNames, baseClassTypeDesc.name);
         if (!baseClassName.has_value())
         {
             m_logger->LogWarn("Skipping BaseClassDescriptor with mangled name %llx", baseClassTypeDescAddr);
@@ -561,7 +470,7 @@ std::optional<VirtualFunctionTableInfo> MicrosoftRTTIProcessor::ProcessVFT(uint6
         // Until https://github.com/Vector35/binaryninja-api/issues/5982 is fixed
         auto vftSize = virtualFunctions.size() * addrSize;
         vftBuilder.SetWidth(vftSize);
-        
+
         if (auto baseVft = classInfo.baseVft)
         {
             if (classInfo.baseVft->virtualFunctions.size() <= virtualFunctions.size())
@@ -584,7 +493,7 @@ std::optional<VirtualFunctionTableInfo> MicrosoftRTTIProcessor::ProcessVFT(uint6
                 LogWarn("Skipping adjustments for base VFT with more functions than sub VFT... %llx", vftAddr);
             }
         }
-        
+
         for (auto &&vFunc: virtualFunctions)
         {
             auto vFuncName = fmt::format("vFunc_{}", vFuncIdx);
@@ -623,7 +532,7 @@ MicrosoftRTTIProcessor::MicrosoftRTTIProcessor(const Ref<BinaryView> &view, bool
     checkWritableRData = checkRData;
     m_classInfo = {};
     virtualFunctionTableSweep = vftSweep;
-    auto metadata = view->QueryMetadata(VIEW_METADATA_MSVC);
+    auto metadata = view->QueryMetadata(VIEW_METADATA_RTTI);
     if (metadata != nullptr)
     {
         // Load in metadata to the processor.
@@ -686,12 +595,12 @@ void MicrosoftRTTIProcessor::ProcessRTTI()
     {
         if (segment->GetFlags() == (SegmentReadable | SegmentContainsData))
         {
-            m_logger->LogDebug("Attempting to find VirtualFunctionTables in segment %llx", segment->GetStart());
+            m_logger->LogDebug("Attempting to find RTTI in segment %llx", segment->GetStart());
             scan(segment);
         }
         else if (checkWritableRData && rdataSection && rdataSection->GetStart() == segment->GetStart())
         {
-            m_logger->LogDebug("Attempting to find VirtualFunctionTables in writable rdata segment %llx",
+            m_logger->LogDebug("Attempting to find RTTI in writable rdata segment %llx",
                                segment->GetStart());
             scan(segment);
         }
@@ -763,7 +672,7 @@ void MicrosoftRTTIProcessor::ProcessVFT()
         vftFinishedMap[vftAddr] = vftInfo;
         return vftInfo;
     };
-    
+
     for (const auto &[coLocatorAddr, vftAddr]: vftMap)
     {
         auto classInfo = m_classInfo.find(coLocatorAddr)->second;
@@ -789,7 +698,7 @@ void MicrosoftRTTIProcessor::ProcessVFT()
             classInfo.vft = vftInfo.value();
         }
     }
-    
+
     auto end_time = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed_time = end_time - start_time;
     m_logger->LogInfo("ProcessVFT took %f seconds", elapsed_time.count());
