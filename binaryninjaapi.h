@@ -11908,34 +11908,6 @@ namespace BinaryNinja {
 		ExprId ExternPointer(
 		    size_t size, uint64_t val, uint64_t offset, const ILSourceLocation& loc = ILSourceLocation());
 
-		/*!
-		retrieve a paired single
-			\param size The size of the reg in bytes, likely 8?
-			\param s the floating point register to use
-			\param index the floating point param, either a 0 or a 1
-		*/
-		ExprId PairedSingle(size_t size, ExprId s, uint32_t index, const ILSourceLocation& loc = ILSourceLocation());
-
-		/*!
-		quantize a paired single
-			\param size The size of the reg in bytes, likely 8?
-			\param a the first floating point register to use
-			\param b the second floating point register to use
-			\param q quantize register to use
-			\param w paired single control
-		*/
-		ExprId Quantize(size_t size, ExprId a, ExprId b, ExprId q, ExprId w, const ILSourceLocation& loc = ILSourceLocation());
-
-		/*!
-		dequantize a paired single
-			\param size The size of the reg in bytes, likely 8?
-			\param a the first floating point register to use
-			\param b the second floating point register to use
-			\param q quantize register to use
-			\param w paired single control
-		*/
-		ExprId DeQuantize(size_t size, ExprId a, ExprId b, ExprId q, ExprId w, const ILSourceLocation& loc = ILSourceLocation());
-
 		/*! Returns an expression for the constant raw binary floating point
 			value \c value with size \c size
 
