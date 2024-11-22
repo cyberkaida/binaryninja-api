@@ -649,6 +649,8 @@ class PowerpcArchitecture: public Architecture
 			return "dequantize";
 		case PPC_INTRIN_CNTLZW:
 			return "__builtin_clz";
+		case PPC_INTRIN_FRSP:
+			return "float_round";
 		default:
 			break;
 		}
@@ -684,9 +686,11 @@ class PowerpcArchitecture: public Architecture
 		{
 		case PPC_INTRIN_CNTLZW:		// rs
 			return {NameAndType(Type::IntegerType(4, false))};
+		// for now, quantize is operating on the float in, and the gqr that holds the scale
 		case PPC_INTRIN_QUANTIZE:
+			return {NameAndType(Type::FloatType(4)), NameAndType(Type::IntegerType(4, false))};
 		case PPC_INTRIN_DEQUANTIZE:
-			return {NameAndType(Type::IntegerType(8, false))};
+			return {NameAndType(Type::IntegerType(4, false)), NameAndType(Type::FloatType(8)), NameAndType(Type::IntegerType(4, false))};
 		default:
 			break;
 		}
@@ -702,8 +706,10 @@ class PowerpcArchitecture: public Architecture
 		case PPC_INTRIN_CNTLZW:		// ra
 			return {Type::IntegerType(4, false)};
 		case PPC_INTRIN_QUANTIZE:
+			// quantize returns the quantized float
+			return {Type::FloatType(4)};
 		case PPC_INTRIN_DEQUANTIZE:
-			return {Type::IntegerType(8, false)};
+			return {Type::FloatType(4)};
 		default:
 			break;
 		}

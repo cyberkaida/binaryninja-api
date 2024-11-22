@@ -2047,11 +2047,15 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 			// // // first thing is first, quantize!
 		    // ei2 = il.Quantize(8, ei0, ei1, operToIL(il, oper3), operToIL(il, oper2));
 
+			// The intrinsic used to perform the quantize operation.
+			// optional, use output {} for empty.
 			ei0 = il.Intrinsic(
 				{RegisterOrFlag::Register(oper0->reg)},
-				// {},
 				PPC_INTRIN_QUANTIZE,
-				{operToIL(il, oper0, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 8), il.Const(4, oper3->imm)}
+				{
+					operToIL(il, oper0, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 4),
+					il.Const(4, oper3->imm)
+					}
 				);
 
 			il.AddInstruction(ei0);
@@ -2062,7 +2066,7 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 			ei0 = il.Store(8, operToIL(il, oper1),
 				// temporary measure to allow it to resemble the instruction, just oper2il oper0
 		        // ei0
-				operToIL(il, oper0, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 8)
+				operToIL(il, oper0, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 4)
 				// ei2
 			);
 			il.AddInstruction(ei0);
@@ -2095,9 +2099,12 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 		    ei0 = il.Load(8, operToIL(il, oper1));                    // [d(rA)]
 			ei0 = il.Intrinsic(
 				{RegisterOrFlag::Register(oper0->reg)},
-				// {},
 				PPC_INTRIN_DEQUANTIZE,
-				{ei0, operToIL(il, oper0), il.Const(4, oper3->imm)}
+				{
+					ei0,
+					operToIL(il, oper0),
+					il.Const(4, oper3->imm)
+					}
 				);
 
 		    // ei0 = il.SetRegister(8, oper0->reg, il.Operand(8, ei0)); // rD = [d(rA)]
@@ -2108,7 +2115,12 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 			break;
 
 		case PPC_INS_FRSP:
-
+			ei0 = il.Intrinsic(
+				{RegisterOrFlag::Register(oper0->reg)},
+				PPC_INTRIN_FRSP,
+				{operToIL(il, oper1)});
+			il.AddInstruction(ei0);
+			break;
 
 			// =====================================
 		    // =====TO BE DEFINED INSTRUCTIONS======
