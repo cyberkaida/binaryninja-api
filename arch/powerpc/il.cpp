@@ -1808,7 +1808,17 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 
 		case PPC_INS_STFS:
 			REQUIRE2OPS
-			ei0 = il.Store(4, operToIL(il, oper1), il.FloatConvert(4, operToIL(il, oper0)));
+			ei0 = il.FloatConvert(4, operToIL(il, oper0));
+			ei0 = il.Store(4, operToIL(il, oper1), ei0);
+			// ei0 = il.FloatConvert(4, ei0);
+			il.AddInstruction(ei0);
+			break;
+
+		case PPC_INS_STFSX:
+			REQUIRE3OPS
+			ei0 = il.FloatConvert(4, operToIL(il, oper0));
+			ei1 = il.Add(4, operToIL(il, oper1), operToIL(il, oper2));
+			ei0 = il.Store(4, ei1, ei0);
 			// ei0 = il.FloatConvert(4, ei0);
 			il.AddInstruction(ei0);
 			break;
@@ -1831,6 +1841,17 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 
 			// alternatively, do it the way arm64 does it
 			loadstoreppcfs(il, 4, oper0, oper1);
+			break;
+
+		case PPC_INS_LFSX:
+			REQUIRE3OPS
+			ei0 = il.Add(4, operToIL(il, oper1), operToIL(il, oper2));
+			ei0 = il.Load(4, ei0);
+			ei0 = il.Operand(1, ei0);
+			ei0 = il.FloatConvert(4, ei0);
+			ei0 = il.SetRegister(4, oper0->reg, ei0);
+			// alternatively, do it the way arm64 does it
+			il.AddInstruction(ei0);
 			break;
 
 		case PPC_INS_LFD:
@@ -2017,41 +2038,11 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 
 			// w_l = oper2->imm;
 
-			// if (w_l == 0)
-			// {
-
-			// }
-			// else if (w_l == 1)
-			// {
-			// 	ei0 = operToIL(il, oper0);
-			// 	ei0 = il.Intrinsic();
-
-			// 	// Then store the quantized value
-			// 	ei2 = il.Store(8, operToIL(il, oper1, OTI_GPR0_ZERO),
-			// 		// temporary measure to allow it to resemble the instruction, just oper2il oper0
-			// 		operToIL(il, oper0)
-			// 		// ei2
-			// 	);
-			// 	il.AddInstruction(ei2);
-			// }
-			// // pull paired single
-			// ei0 = il.PairedSingle(8, operToIL(il, oper0), 0);
-			// ei1 = il.PairedSingle(8, operToIL(il, oper0), 1);
-
-			// // convert gqr to a register
-		    // gqr_l = (ppc_reg_bn)(oper3->imm + PPC_REG_BN_GQR0);
-		    // oper3->type = PPC_OP_REG;
-		    // oper3->imm = 0;
-		    // oper3->reg = (ppc_reg)gqr_l;
-
-			// // // first thing is first, quantize!
-		    // ei2 = il.Quantize(8, ei0, ei1, operToIL(il, oper3), operToIL(il, oper2));
-
 			// The intrinsic used to perform the quantize operation.
 			// optional, use output {} for empty.
 			ei0 = il.Intrinsic(
 				{RegisterOrFlag::Register(oper0->reg)},
-				PPC_INTRIN_QUANTIZE,
+				PPC_PS_INTRIN_QUANTIZE,
 				{
 					operToIL(il, oper0, PPC_IL_OPTIONS_DEFAULT, PPC_IL_EXTRA_DEFAULT, 4),
 					il.Const(4, oper3->imm)
@@ -2059,8 +2050,6 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 				);
 
 			il.AddInstruction(ei0);
-
-			// ei0 = il.SetRegister(8, oper0->reg, ei0);
 
 			// Then store the quantized value
 			ei0 = il.Store(8, operToIL(il, oper1),
@@ -2071,35 +2060,21 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 			);
 			il.AddInstruction(ei0);
 
+			// we are supposed to quantize the upper 32 bits as well, ps1 if w=0
+			// if (w_l == 0)
+			// {
+
+			// }
 			break;
 
 		case PPC_INS_PSQ_L:
 			REQUIRE4OPS
 		    // w_l = oper2->imm;
 
-			// // pull paired single
-		    // ei0 = il.PairedSingle(8, operToIL(il, oper0), 0);
-		    // ei1 = il.PairedSingle(8, operToIL(il, oper0), 1);
-
-			// // // convert gqr to a register
-		    // gqr_l = (ppc_reg_bn)(oper3->imm + PPC_REG_BN_GQR0);
-		    // oper3->type = PPC_OP_REG;
-		    // oper3->imm = 0;
-		    // oper3->reg = (ppc_reg)gqr_l;
-
-			// // // first thing is first, dequantize!
-		    // ei2 = il.DeQuantize(8, ei0, ei1, operToIL(il, oper3), operToIL(il, oper2));
-
-			// // Then store the quantized value
-		    // ei0 = operToIL(il, oper1, OTI_GPR0_ZERO); // d(rA) or 0
-		    // ei0 = il.Load(8, ei0);                    // [d(rA)]
-		    // ei0 = il.SetRegister(8, oper0->reg, ei0); // rD = [d(rA)]
-		    // il.AddInstruction(ei0);
-
 		    ei0 = il.Load(8, operToIL(il, oper1));                    // [d(rA)]
 			ei0 = il.Intrinsic(
 				{RegisterOrFlag::Register(oper0->reg)},
-				PPC_INTRIN_DEQUANTIZE,
+				PPC_PS_INTRIN_DEQUANTIZE,
 				{
 					ei0,
 					operToIL(il, oper0),
@@ -2107,11 +2082,14 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 					}
 				);
 
-		    // ei0 = il.SetRegister(8, oper0->reg, il.Operand(8, ei0)); // rD = [d(rA)]
-
 			il.AddInstruction(ei0);
 
-		    // il.AddInstruction(ei0);
+			// again, if w=0 qdequantize ps1
+			// if (w_l == 0)
+			// {
+
+			// }
+
 			break;
 
 		case PPC_INS_FRSP:
@@ -2350,7 +2328,6 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 		case PPC_INS_LFIWZX:
 		case PPC_INS_LFSU:
 		case PPC_INS_LFSUX:
-		case PPC_INS_LFSX:
 		case PPC_INS_LSWI:
 		case PPC_INS_LVEBX:
 		case PPC_INS_LVEHX:
@@ -2417,7 +2394,6 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 		case PPC_INS_STFIWX:
 		case PPC_INS_STFSU:
 		case PPC_INS_STFSUX:
-		case PPC_INS_STFSX:
 		case PPC_INS_STSWI:
 		case PPC_INS_STVEBX:
 		case PPC_INS_STVEHX:

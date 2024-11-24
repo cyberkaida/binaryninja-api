@@ -639,39 +639,57 @@ class PowerpcArchitecture: public Architecture
 		return rc;
 	}
 
+	static string GetIntrinsicName_ppc_ps(uint32_t intrinsic)
+	{
+		switch (intrinsic)
+		{
+		case PPC_PS_INTRIN_QUANTIZE:
+			return "quantize";
+		case PPC_PS_INTRIN_DEQUANTIZE:
+			return "dequantize";
+		default:
+			break;
+		}
+		return "";
+	}
+
 	virtual string GetIntrinsicName(uint32_t intrinsic) override
 	{
 		switch (intrinsic)
 		{
-		case PPC_INTRIN_QUANTIZE:
-			return "quantize";
-		case PPC_INTRIN_DEQUANTIZE:
-			return "dequantize";
 		case PPC_INTRIN_CNTLZW:
 			return "__builtin_clz";
 		case PPC_INTRIN_FRSP:
 			return "float_round";
 		default:
+			if (cs_mode_local == CS_MODE_PS)
+			{
+				return GetIntrinsicName_ppc_ps(intrinsic);
+			}
 			break;
 		}
-
 		return "";
 	}
 
 
 	virtual std::vector<uint32_t> GetAllIntrinsics() override
 	{
-		// Highest intrinsic number currently is ARM64_INTRIN_NEON_END.
+		// Highest intrinsic number currently is PPC_PS_INTRIN_END.
 		// If new extensions are added please update this code.
-		std::vector<uint32_t> result{PPC_INTRIN_END};
+		std::vector<uint32_t> result{PPC_PS_INTRIN_END};
 
 		// Double check someone didn't insert a new intrinsic at the beginning of our enum since we rely
 		// on it to fill the next array.
-		static_assert(PPCIntrinsic::PPC_INTRIN_QUANTIZE == 0,
+		static_assert(PPCIntrinsic::PPC_INTRIN_CNTLZW == 0,
 			"Invalid first PPCIntrinsic value. Please add your intrinsic further in the enum.");
 
 		// Normal intrinsics.
-		for (uint32_t id = PPC_INTRIN_QUANTIZE; id < PPCIntrinsic::PPC_INTRIN_END; id++) {
+		for (uint32_t id = PPC_INTRIN_CNTLZW; id < PPCIntrinsic::PPC_INTRIN_END; id++) {
+			result.push_back(id);
+		}
+
+		// PPC_PS intrinsics.
+		for (uint32_t id = PPC_PS_INTRIN_QUANTIZE; id < PPCIntrinsic::PPC_PS_INTRIN_END; id++) {
 			result.push_back(id);
 		}
 
@@ -679,6 +697,20 @@ class PowerpcArchitecture: public Architecture
 		return result;
 	}
 
+	static vector<NameAndType> GetIntrinsicInputs_ppc_ps(uint32_t intrinsic)
+	{
+		switch (intrinsic)
+		{
+		// for now, quantize is operating on the float in, and the gqr that holds the scale
+		case PPC_PS_INTRIN_QUANTIZE:
+			return {NameAndType(Type::FloatType(4)), NameAndType(Type::IntegerType(4, false))};
+		case PPC_PS_INTRIN_DEQUANTIZE:
+			return {NameAndType(Type::IntegerType(4, false)), NameAndType(Type::FloatType(8)), NameAndType(Type::IntegerType(4, false))};
+		default:
+			break;
+		}
+		return vector<NameAndType>();
+	}
 
 	virtual vector<NameAndType> GetIntrinsicInputs(uint32_t intrinsic) override
 	{
@@ -686,18 +718,33 @@ class PowerpcArchitecture: public Architecture
 		{
 		case PPC_INTRIN_CNTLZW:		// rs
 			return {NameAndType(Type::IntegerType(4, false))};
+		case PPC_INTRIN_FRSP:
+			return {NameAndType(Type::FloatType(4))};
 		// for now, quantize is operating on the float in, and the gqr that holds the scale
-		case PPC_INTRIN_QUANTIZE:
-			return {NameAndType(Type::FloatType(4)), NameAndType(Type::IntegerType(4, false))};
-		case PPC_INTRIN_DEQUANTIZE:
-			return {NameAndType(Type::IntegerType(4, false)), NameAndType(Type::FloatType(8)), NameAndType(Type::IntegerType(4, false))};
 		default:
+			if (cs_mode_local == CS_MODE_PS)
+			{
+				return GetIntrinsicInputs_ppc_ps(intrinsic);
+			}
 			break;
 		}
-
 		return vector<NameAndType>();
 	}
 
+	static vector<Confidence<Ref<Type>>> GetIntrinsicOutputs_ppc_ps(uint32_t intrinsic)
+	{
+		switch(intrinsic)
+		{
+		case PPC_PS_INTRIN_QUANTIZE:
+			// quantize returns the quantized float
+			return {Type::FloatType(4)};
+		case PPC_PS_INTRIN_DEQUANTIZE:
+			return {Type::FloatType(4)};
+		default:
+			break;
+		}
+		return vector<Confidence<Ref<Type>>>();
+	}
 
 	virtual vector<Confidence<Ref<Type>>> GetIntrinsicOutputs(uint32_t intrinsic) override
 	{
@@ -705,15 +752,15 @@ class PowerpcArchitecture: public Architecture
 		{
 		case PPC_INTRIN_CNTLZW:		// ra
 			return {Type::IntegerType(4, false)};
-		case PPC_INTRIN_QUANTIZE:
-			// quantize returns the quantized float
-			return {Type::FloatType(4)};
-		case PPC_INTRIN_DEQUANTIZE:
+		case PPC_INTRIN_FRSP:
 			return {Type::FloatType(4)};
 		default:
+			if (cs_mode_local == CS_MODE_PS)
+			{
+				return GetIntrinsicOutputs_ppc_ps(intrinsic);
+			}
 			break;
 		}
-
 		return vector<Confidence<Ref<Type>>>();
 	}
 
