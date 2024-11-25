@@ -4281,6 +4281,7 @@ namespace BinaryNinja {
 		TagReference();
 		TagReference(const BNTagReference& ref);
 
+		bool EqualsByData(const TagReference& other) const;
 		bool operator==(const TagReference& other) const;
 		bool operator!=(const TagReference& other) const;
 
@@ -4948,7 +4949,7 @@ namespace BinaryNinja {
 
 
 		/*! GetOriginalBase queries for the original image base in the BinaryView, unaffected by any rebasing operations
-		    \deprecated This API has been deprecated in favor of GetOriginalImageBase in 4.0.xxxx
+		    \deprecated This API has been deprecated in favor of GetOriginalImageBase in 4.1.5902
 
 		    \return the original image base of the BinaryView
 		*/
@@ -4957,7 +4958,7 @@ namespace BinaryNinja {
 		/*! SetOriginalBase sets the original image base in the BinaryView, unaffected by any rebasing operations.
 		 * This is only intended to be used by Binary View implementations to provide this value. Regular users should
 		 * NOT change this value.
-		    \deprecated This API has been deprecated in favor of SetOriginalImageBase in 4.0.xxxx
+		    \deprecated This API has been deprecated in favor of SetOriginalImageBase in 4.1.5902
 
 		    \param base the original image base of the binary view
 		*/
@@ -6688,7 +6689,7 @@ namespace BinaryNinja {
 		std::vector<std::string> GetUniqueSectionNames(const std::vector<std::string>& names);
 
 		/*! Get the list of allocated ranges
-		   \deprecated This API has been deprecated in favor of GetMappedAddressRanges in 4.0.xxxx
+		   \deprecated This API has been deprecated in favor of GetMappedAddressRanges in 4.1.5902
 
 			\return The list of allocated ranges
 		*/
@@ -9941,15 +9942,6 @@ namespace BinaryNinja {
 
 	  public:
 		/*!
-
-			\code{.cpp}
-		    MyClass::MyActionMethod(Ref<AnalysisContext> ac);
-		    ...
-		 	// Create a clone of the default workflow named "core.function.myWorkflowName"
-		    Ref<Workflow> wf = BinaryNinja::Workflow::Instance("core.function.defaultAnalysis")->Clone("core.function.myWorkflowName");
-		 	wf->RegisterActivity(new BinaryNinja::Activity("core.function.myWorkflowName.resolveMethodCalls", &MyClass::MyActionMethod));
-		 	\endcode
-
 			\param configuration a JSON representation of the activity configuration
 			\param action Workflow action, a function taking a Ref<AnalysisContext> as an argument.
 		*/
@@ -9978,15 +9970,13 @@ namespace BinaryNinja {
 		bool ClearOverride(const std::string& activity);
 	};
 
-	/*! A Binary Ninja Workflow is an abstraction of a computational binary analysis pipeline and it provides the extensibility
-		mechanism needed for tailored binary analysis and decompilation. More specifically, a Workflow is a repository of activities along with a
-		unique strategy to execute them. Binary Ninja provides two Workflows named ``core.module.defaultAnalysis`` and ``core.function.defaultAnalysis``
-		which expose the core analysis.
+	/*! Workflows are represented as Directed Acyclic Graphs (DAGs), where each node corresponds to an Activity (an individual analysis or action).
+		Workflows are used to tailor the analysis process for :class:`BinaryView` or :class:`Function` objects, providing granular control over
+		analysis tasks at module or function levels.
 
-		A Workflow starts in the unregistered state from either creating a new empty Workflow, or cloning an existing Workflow. While unregistered
-		it's possible to add and remove activities, as well as change the execution strategy. In order to use the Workflow on a binary it must be
-		registered. Once registered the Workflow is immutable and available for use.
-
+		A Workflow starts in an unregistered state, either by creating a new empty Workflow or by cloning an existing one. While unregistered, it
+		is possible to add and remove Activity objects, as well as modify the execution strategy. To apply a Workflow to a binary, it must be
+		registered. Once registered, the Workflow becomes immutable and is available for use.
 	 	\ingroup workflow
 	*/
 	class Workflow : public CoreRefCountObject<BNWorkflow, BNNewWorkflowReference, BNFreeWorkflow>
