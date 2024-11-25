@@ -461,7 +461,9 @@ static void ByteReversedStore(LowLevelILFunction &il, struct cs_ppc* ppc, size_t
 
 static void loadstoreppcfs(LowLevelILFunction& il, int load_store_sz,
 	cs_ppc_op* operand1, /* register that gets read/written */
-	cs_ppc_op* operand2 /* location the read/write occurs */
+	cs_ppc_op* operand2, /* location the read/write occurs */
+	cs_ppc_op* operand3=0,
+	bool update=false
 	)
 {
 	ExprId tmp;
@@ -471,16 +473,32 @@ static void loadstoreppcfs(LowLevelILFunction& il, int load_store_sz,
 		load_store_sz = 4;
 
 	// operand1.reg = [operand2.reg + operand2.imm]
-	if (operand2->mem.disp == 0)
+	if (operand2->type == PPC_OP_MEM)
 	{
-		tmp = il.Register(4, operand2->mem.base);
+		if (operand2->mem.disp == 0)
+		{
+			tmp = il.Register(4, operand2->mem.base);
+		}
+		else
+		{
+			tmp = il.Add(addrsz, il.Register(addrsz, operand2->mem.base), il.Const(addrsz, operand2->mem.disp));
+		}		
 	}
-	else
+	else if(operand2->type == PPC_OP_REG)
 	{
-		tmp = il.Add(addrsz, il.Register(addrsz, operand2->mem.base), il.Const(addrsz, operand2->mem.disp));
+		if ((operand3 != 0) && (operand3->type == PPC_OP_REG))
+		{
+			tmp = il.Add(4, il.Register(addrsz, operand2->reg), il.Register(addrsz, operand3->reg));
+		}
 	}
 
 	il.AddInstruction(il.SetRegister(load_store_sz, operand1->reg, il.FloatConvert(load_store_sz, il.Operand(1, il.Load(load_store_sz, tmp)))));
+	
+	if (update == true)
+	{
+		tmp = il.SetRegister(4, operand2->reg, tmp);
+		il.AddInstruction(tmp);
+	}
 }
 
 /* returns TRUE - if this IL continues
@@ -1720,7 +1738,9 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 
 		case PPC_INS_MR: /* move register */
 			REQUIRE2OPS
-			il.AddInstruction(il.SetRegister(4, oper0->reg, operToIL(il, oper1)));
+			ei0 = il.SetRegister(4, oper0->reg, operToIL(il, oper1),
+				ppc->update_cr0 ? IL_FLAGWRITE_CR0_S : 0);
+			il.AddInstruction(ei0);
 			break;
 
 		case PPC_INS_SC:
@@ -1845,13 +1865,25 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 
 		case PPC_INS_LFSX:
 			REQUIRE3OPS
-			ei0 = il.Add(4, operToIL(il, oper1), operToIL(il, oper2));
-			ei0 = il.Load(4, ei0);
-			ei0 = il.Operand(1, ei0);
-			ei0 = il.FloatConvert(4, ei0);
-			ei0 = il.SetRegister(4, oper0->reg, ei0);
-			// alternatively, do it the way arm64 does it
-			il.AddInstruction(ei0);
+			// ei0 = il.Add(4, operToIL(il, oper1), operToIL(il, oper2));
+			// ei0 = il.Load(4, ei0);
+			// ei0 = il.Operand(1, ei0);
+			// ei0 = il.FloatConvert(4, ei0);
+			// ei0 = il.SetRegister(4, oper0->reg, ei0);
+			// // alternatively, do it the way arm64 does it
+			// il.AddInstruction(ei0);
+
+			loadstoreppcfs(il, 4, oper0, oper1, oper2);
+			break;
+
+		case PPC_INS_LFSU:
+			REQUIRE2OPS
+			loadstoreppcfs(il, 4, oper0, oper1, 0, true);
+			break;
+
+		case PPC_INS_LFSUX:
+			REQUIRE3OPS
+			loadstoreppcfs(il, 4, oper0, oper1, oper2, true);
 			break;
 
 		case PPC_INS_LFD:
@@ -2326,8 +2358,6 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 		case PPC_INS_LFDX:
 		case PPC_INS_LFIWAX:
 		case PPC_INS_LFIWZX:
-		case PPC_INS_LFSU:
-		case PPC_INS_LFSUX:
 		case PPC_INS_LSWI:
 		case PPC_INS_LVEBX:
 		case PPC_INS_LVEHX:
