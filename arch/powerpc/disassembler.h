@@ -29,6 +29,11 @@ Then some helpers if you need them:
 #define PPC_CRX_REG_MASK	0x1ff
 #define PPC_CRX_FLOAT_MASK	0x200
 
+// TODO this is some sorta capstone baddy, where xori is showing as xnop's
+// opcode. Maybe pulling capstone will fix, need for xori to correctly
+// lift. Capstone is posting that XORI is 1452, though that is XNOP
+#define PPC_BN_INS_XORI PPC_INS_XNOP
+
 //*****************************************************************************
 // structs and types
 //*****************************************************************************

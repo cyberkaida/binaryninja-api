@@ -799,7 +799,7 @@ getil:
 	virtual size_t GetFlagWriteLowLevelIL(BNLowLevelILOperation op, size_t size, uint32_t flagWriteType,
 		uint32_t flag, BNRegisterOrConstant* operands, size_t operandCount, LowLevelILFunction& il) override
 	{
-		MYLOG("%s(), op:%d, flagwritetype:%d, flag:%d\n", __func__, op, flagWriteType, flag);
+		// MYLOG("%s(), op:%d, flagwritetype:%d, flag:%d\n", __func__, op, flagWriteType, flag);
 		bool signedWrite = true;
 		ExprId left, right;
 		ppc_suf suf = (ppc_suf)0;
@@ -938,7 +938,7 @@ getil:
 
 	virtual ExprId GetSemanticFlagGroupLowLevelIL(uint32_t semGroup, LowLevelILFunction& il) override
 	{
-		MYLOG("%s() semgroup:%d\n", __func__, semGroup);
+		// MYLOG("%s() semgroup:%d\n", __func__, semGroup);
 		uint32_t flagBase = (semGroup / 10) * 4; // get to flags from the right cr
 
 		switch (semGroup % 10)
@@ -995,7 +995,7 @@ getil:
 
 	virtual string GetFlagName(uint32_t flag) override
 	{
-		MYLOG("%s() flag:%d\n", __func__, flag);
+		// MYLOG("%s() flag:%d\n", __func__, flag);
 
 		switch(powerpc_crx_to_reg(flag)) {
 			case IL_FLAG_LT: return "lt";
@@ -1070,7 +1070,7 @@ getil:
 
 	virtual string GetFlagWriteTypeName(uint32_t writeType) override
 	{
-		MYLOG("%s() writeType:%d\n", __func__, writeType);
+		// MYLOG("%s() writeType:%d\n", __func__, writeType);
 
 		switch (writeType)
 		{
@@ -1177,7 +1177,7 @@ getil:
 
 	virtual vector<uint32_t> GetFlagsWrittenByFlagWriteType(uint32_t writeType) override
 	{
-		MYLOG("%s() writeType:%d\n", __func__, writeType);
+		// MYLOG("%s() writeType:%d\n", __func__, writeType);
 
 		switch (writeType)
 		{
@@ -1277,7 +1277,7 @@ getil:
 	}
 	virtual uint32_t GetSemanticClassForFlagWriteType(uint32_t writeType) override
 	{
-		MYLOG("%s() writetype:%d", __func__, writeType);
+		// MYLOG("%s() writetype:%d", __func__, writeType);
 		uint32_t flag_out = 0;
 
 		if ((writeType < IL_FLAGWRITE_CR0_S) || (writeType > IL_FLAGWRITE_CR7_F))
@@ -1373,7 +1373,7 @@ getil:
 
 	virtual std::map<uint32_t, BNLowLevelILFlagCondition> GetFlagConditionsForSemanticFlagGroup(uint32_t semGroup) override
 	{
-		MYLOG("%s() semgroup:%d", __func__, semGroup);
+		// MYLOG("%s() semgroup:%d", __func__, semGroup);
 		
 		uint32_t flagClassBase = IL_FLAGCLASS_CR0_S + ((semGroup / 10) * PPC_SUF_SZ);
 		uint32_t groupType = semGroup % 10;
@@ -1427,7 +1427,7 @@ getil:
 
 	virtual BNFlagRole GetFlagRole(uint32_t flag, uint32_t semClass) override
 	{
-		MYLOG("%s() flag:%d, semclass:%d\n", __func__, flag, semClass);
+		// MYLOG("%s() flag:%d, semclass:%d\n", __func__, flag, semClass);
 
 		ppc_suf suf = (ppc_suf)0;
 
@@ -1486,7 +1486,7 @@ getil:
 	*/
 	virtual vector<uint32_t> GetFlagsRequiredForFlagCondition(BNLowLevelILFlagCondition cond, uint32_t) override
 	{
-		MYLOG("%s() cond:%d\n", __func__, cond);
+		// MYLOG("%s() cond:%d\n", __func__, cond);
 
 		switch (cond)
 		{

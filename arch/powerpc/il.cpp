@@ -136,7 +136,7 @@ static ExprId operToIL(LowLevelILFunction &il, struct cs_ppc_op *op,
 /* map PPC_REG_CRX to an IL flagwrite type (a named set of written flags */
 int crxToFlagWriteType(int crx, bool signedComparison = true)
 {
-	MYLOG("%s() crx:%d", __func__, crx);
+	// MYLOG("%s() crx:%d", __func__, crx);
 	int flag_out = 0;
 	int crx_local = 0;
 	int crx_type = 0;
@@ -171,7 +171,7 @@ fail:
 
 static ExprId ExtractConditionClause(LowLevelILFunction& il, uint8_t crBit, bool negate = false)
 {
-	MYLOG("%s() crbit:%x", __func__, crBit);
+	// MYLOG("%s() crbit:%x", __func__, crBit);
 	uint32_t flagBase = (crBit / 4) * 10;
 
 	switch (crBit & 3)
@@ -244,7 +244,7 @@ static bool LiftConditionalBranch(LowLevelILFunction& il, uint8_t bo, uint8_t bi
 
 static bool LiftBranches(Architecture* arch, LowLevelILFunction &il, const uint8_t* data, uint64_t addr, bool le)
 {
-	MYLOG("%s() addr:0x%08llx\n", __func__, addr);
+	// MYLOG("%s() addr:0x%08llx\n", __func__, addr);
 	uint32_t insn = *(const uint32_t *) data;
 
 	if (!le)
@@ -1241,6 +1241,7 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 			break;
 
 		case PPC_INS_XORI:
+		case PPC_BN_INS_XORI:
 		case PPC_INS_XORIS:
 			REQUIRE3OPS
 			if (insn->id == PPC_INS_XORIS)
@@ -2834,7 +2835,9 @@ bool GetLowLevelILForPPCInstruction(Architecture *arch, LowLevelILFunction &il,
 		case PPC_INS_TWUI:
 		case PPC_INS_WAITRSV:
 		case PPC_INS_WAITIMPL:
-		case PPC_INS_XNOP:
+		// TODO not technically implemented but capstone misinterprettation
+		// where it is posting that XORI is 1452, though that is XNOP
+		// case PPC_INS_XNOP:
 		case PPC_INS_XVMOVDP:
 		case PPC_INS_XVMOVSP:
 		case PPC_INS_XXSPLTD:
