@@ -591,7 +591,7 @@ class BinaryViewEvent:
 	def _notify(view: core.BNBinaryViewHandle, callback: BinaryViewEventCallback) -> None:
 		try:
 			file_metadata = filemetadata.FileMetadata(handle=core.BNGetFileForView(view))
-			view_obj = BinaryView(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
+			view_obj = BinaryView._from_cache_or_new(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
 			callback(view_obj)
 		except:
 			log_error(traceback.format_exc())
@@ -1292,7 +1292,7 @@ class BinaryViewType(metaclass=_BinaryViewTypeMetaclass):
 		view = core.BNCreateBinaryViewOfType(self.handle, data.handle)
 		if view is None:
 			return None
-		return BinaryView(file_metadata=data.file, handle=view)
+		return BinaryView._from_cache_or_new(file_metadata=data.file, handle=view)
 
 	def open(self, src: PathType, file_metadata: 'filemetadata.FileMetadata' = None) -> Optional['BinaryView']:
 		data = BinaryView.open(src, file_metadata)
@@ -1306,7 +1306,7 @@ class BinaryViewType(metaclass=_BinaryViewTypeMetaclass):
 		view = core.BNParseBinaryViewOfType(self.handle, data.handle)
 		if view is None:
 			return None
-		return BinaryView(file_metadata=data.file, handle=view)
+		return BinaryView._from_cache_or_new(file_metadata=data.file, handle=view)
 
 	def is_valid_for_data(self, data: 'BinaryView') -> bool:
 		return core.BNIsBinaryViewTypeValidForData(self.handle, data.handle)
@@ -1339,7 +1339,7 @@ class BinaryViewType(metaclass=_BinaryViewTypeMetaclass):
 		def callback(cb, view, meta):
 			try:
 				file_metadata = filemetadata.FileMetadata(handle=core.BNGetFileForView(view))
-				view_obj = BinaryView(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
+				view_obj = BinaryView._from_cache_or_new(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
 				meta_obj = metadata.Metadata(handle=core.BNNewMetadataReference(meta))
 				plat = cb(view_obj, meta_obj)
 				if plat:
@@ -2359,20 +2359,38 @@ class BinaryView:
 	def _cache_contains(cls, handle):
 		return ctypes.addressof(handle.contents) in cls._cached_instances
 
-	def __new__(cls, file_metadata=None, parent_view=None, handle=None):
+	# def __new__(cls, file_metadata=None, parent_view=None, handle=None):
+	# 	if handle:
+	# 		key = ctypes.addressof(handle.contents)
+	# 		if key in cls._cached_instances:
+	# 			core.BNFreeBinaryView(handle) # release the already taken reference since we are pulling from the cache
+	# 			return cls._cached_instances[key]
+	# 	return super().__new__(cls)
+
+	@classmethod
+	def _from_cache_or_new(
+			cls,
+			file_metadata: Optional['filemetadata.FileMetadata'] = None,
+			parent_view: Optional['BinaryView'] = None,
+			handle: Optional[core.BNBinaryViewHandle] = None
+	) -> 'BinaryView':
 		if handle:
 			key = ctypes.addressof(handle.contents)
 			if key in cls._cached_instances:
 				core.BNFreeBinaryView(handle) # release the already taken reference since we are pulling from the cache
 				return cls._cached_instances[key]
-		return super().__new__(cls)
+		return cls(file_metadata=file_metadata, parent_view=parent_view, handle=handle)
 
 	def __init__(
 	    self, file_metadata: Optional['filemetadata.FileMetadata'] = None, parent_view: Optional['BinaryView'] = None,
 	    handle: Optional[core.BNBinaryViewHandle] = None
 	):
+		register = False
 		if handle is not None:
 			if self.__class__._cache_contains(handle):
+				print("what we're here?")
+				import traceback
+				traceback.print_stack()
 				return
 			_handle = handle
 			if file_metadata is None:
@@ -2419,6 +2437,7 @@ class BinaryView:
 			if parent_view is not None:
 				_parent_view = parent_view.handle
 			_handle = core.BNCreateCustomBinaryView(self.__class__.name, file_metadata.handle, _parent_view, self._cb)
+			register = True
 
 		assert _handle is not None
 		self.handle = _handle
@@ -2427,6 +2446,9 @@ class BinaryView:
 		self._preload_limit = 5
 		self._platform = None
 		self._endianness = None
+
+		if register:
+			BinaryView._cache_insert(self)
 
 	def __enter__(self) -> 'BinaryView':
 		return self
@@ -2576,7 +2598,7 @@ class BinaryView:
 	def _create(cls, ctxt, data: core.BNBinaryView):
 		try:
 			file_metadata = filemetadata.FileMetadata(handle=core.BNGetFileForView(data))
-			view = cls(BinaryView(file_metadata=file_metadata, handle=core.BNNewViewReference(data)))  # type: ignore
+			view = cls(BinaryView._from_cache_or_new(file_metadata=file_metadata, handle=core.BNNewViewReference(data)))  # type: ignore
 			if view is None:
 				return None
 			view.parse_only = False
@@ -2591,7 +2613,7 @@ class BinaryView:
 	def _parse(cls, ctxt, data: core.BNBinaryView):
 		try:
 			file_metadata = filemetadata.FileMetadata(handle=core.BNGetFileForView(data))
-			view = cls(BinaryView(file_metadata=file_metadata, handle=core.BNNewViewReference(data)))  # type: ignore
+			view = cls(BinaryView._from_cache_or_new(file_metadata=file_metadata, handle=core.BNNewViewReference(data)))  # type: ignore
 			if view is None:
 				return None
 			view.parse_only = True
@@ -2606,7 +2628,7 @@ class BinaryView:
 	def _is_valid_for_data(cls, ctxt, data):
 		try:
 			# I'm not sure whats going on here even so I've suppressed the linter warning
-			return cls.is_valid_for_data(BinaryView(handle=core.BNNewViewReference(data)))  # type: ignore
+			return cls.is_valid_for_data(BinaryView._from_cache_or_new(handle=core.BNNewViewReference(data)))  # type: ignore
 		except:
 			log_error(traceback.format_exc())
 			return False
@@ -2641,7 +2663,7 @@ class BinaryView:
 			attr = getattr(cls, "get_load_settings_for_data", None)
 			if callable(attr):
 				result = cls.get_load_settings_for_data(
-				    BinaryView(handle=core.BNNewViewReference(data))
+				    BinaryView._from_cache_or_new(handle=core.BNNewViewReference(data))
 				)  # type: ignore
 				settings_handle = core.BNNewSettingsReference(result.handle)
 				assert settings_handle is not None, "core.BNNewSettingsReference returned None"
@@ -2665,7 +2687,7 @@ class BinaryView:
 			view = core.BNCreateBinaryDataViewFromFilename(file_metadata.handle, str(src))
 		if view is None:
 			return None
-		return BinaryView(file_metadata=file_metadata, handle=view)
+		return BinaryView._from_cache_or_new(file_metadata=file_metadata, handle=view)
 
 	@staticmethod
 	def new(data: Optional[Union[bytes, bytearray, 'databuffer.DataBuffer']] = None, file_metadata: Optional['filemetadata.FileMetadata'] = None) -> Optional['BinaryView']:
@@ -2699,7 +2721,7 @@ class BinaryView:
 			view = core.BNCreateBinaryDataViewFromBuffer(file_metadata.handle, buf.handle)
 		if view is None:
 			return None
-		return BinaryView(file_metadata=file_metadata, handle=view)
+		return BinaryView._from_cache_or_new(file_metadata=file_metadata, handle=view)
 
 	@staticmethod
 	def load(source: Union[str, bytes, bytearray, 'databuffer.DataBuffer', 'os.PathLike', 'BinaryView', 'project.ProjectFile'], update_analysis: bool = True,
@@ -2760,7 +2782,7 @@ class BinaryView:
 			handle = core.BNLoadBinaryView(raw_view.handle, update_analysis, json.dumps(options), progress_cfunc, None)
 		else:
 			raise NotImplementedError
-		return BinaryView(handle=handle) if handle else None
+		return BinaryView._from_cache_or_new(handle=handle) if handle else None
 
 	@classmethod
 	def _unregister(cls, view: core.BNBinaryView) -> None:
@@ -2850,7 +2872,7 @@ class BinaryView:
 		result = core.BNGetParentView(self.handle)
 		if result is None:
 			return None
-		return BinaryView(handle=result)
+		return BinaryView._from_cache_or_new(handle=result)
 
 	@property
 	def modified(self) -> bool:

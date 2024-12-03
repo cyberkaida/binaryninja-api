@@ -416,7 +416,7 @@ class Function:
 		FunctionHandle = ctypes.POINTER(core.BNFunction)
 		self.handle = ctypes.cast(handle, FunctionHandle)
 		if view is None:
-			self._view = binaryview.BinaryView(handle=core.BNGetFunctionData(self.handle))
+			self._view = binaryview.BinaryView._from_cache_or_new(handle=core.BNGetFunctionData(self.handle))
 		else:
 			self._view = view
 		self._arch = None

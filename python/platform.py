@@ -127,7 +127,7 @@ class Platform(metaclass=_PlatformMetaClass):
 
 	def _view_init(self, ctxt, view):
 		try:
-			view_obj = binaryview.BinaryView(handle=core.BNNewViewReference(view))
+			view_obj = binaryview.BinaryView._from_cache_or_new(handle=core.BNNewViewReference(view))
 			self.view_init(view)
 		except:
 			log_error(traceback.format_exc())

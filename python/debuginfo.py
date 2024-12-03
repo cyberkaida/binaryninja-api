@@ -99,7 +99,7 @@ class _DebugInfoParserMetaClass(type):
 	def _is_valid(view: core.BNBinaryView, callback: Callable[['binaryview.BinaryView'], bool]) -> bool:
 		try:
 			file_metadata = filemetadata.FileMetadata(handle=core.BNGetFileForView(view))
-			view_obj = binaryview.BinaryView(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
+			view_obj = binaryview.BinaryView._from_cache_or_new(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
 			return callback(view_obj)
 		except:
 			log_error(traceback.format_exc())
@@ -112,9 +112,9 @@ class _DebugInfoParserMetaClass(type):
 	) -> bool:
 		try:
 			file_metadata = filemetadata.FileMetadata(handle=core.BNGetFileForView(view))
-			view_obj = binaryview.BinaryView(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
+			view_obj = binaryview.BinaryView._from_cache_or_new(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
 			debug_file_metadata = filemetadata.FileMetadata(handle=core.BNGetFileForView(debug_view))
-			debug_view_obj = binaryview.BinaryView(file_metadata=debug_file_metadata, handle=core.BNNewViewReference(debug_view))
+			debug_view_obj = binaryview.BinaryView._from_cache_or_new(file_metadata=debug_file_metadata, handle=core.BNNewViewReference(debug_view))
 			parser_ref = core.BNNewDebugInfoReference(debug_info)
 			assert parser_ref is not None, "core.BNNewDebugInfoReference returned None"
 			return callback(DebugInfo(parser_ref), view_obj, debug_view_obj, progress)

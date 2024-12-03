@@ -55,7 +55,7 @@ class FunctionRecognizer:
 	def _recognize_low_level_il(self, ctxt, data, func, il):
 		try:
 			file_metadata = filemetadata.FileMetadata(handle=core.BNGetFileForView(data))
-			view = binaryview.BinaryView(file_metadata=file_metadata, handle=core.BNNewViewReference(data))
+			view = binaryview.BinaryView._from_cache_or_new(file_metadata=file_metadata, handle=core.BNNewViewReference(data))
 			func = function.Function(view, handle=core.BNNewFunctionReference(func))
 			il = lowlevelil.LowLevelILFunction(func.arch, handle=core.BNNewLowLevelILFunctionReference(il))
 			return self.recognize_low_level_il(view, func, il)
@@ -69,7 +69,7 @@ class FunctionRecognizer:
 	def _recognize_medium_level_il(self, ctxt, data, func, il):
 		try:
 			file_metadata = filemetadata.FileMetadata(handle=core.BNGetFileForView(data))
-			view = binaryview.BinaryView(file_metadata=file_metadata, handle=core.BNNewViewReference(data))
+			view = binaryview.BinaryView._from_cache_or_new(file_metadata=file_metadata, handle=core.BNNewViewReference(data))
 			func = function.Function(view, handle=core.BNNewFunctionReference(func))
 			il = mediumlevelil.MediumLevelILFunction(func.arch, handle=core.BNNewMediumLevelILFunctionReference(il))
 			return self.recognize_medium_level_il(view, func, il)

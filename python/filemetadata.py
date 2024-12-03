@@ -253,7 +253,7 @@ class FileMetadata:
 		view = core.BNGetFileViewOfType(self.handle, "Raw")
 		if view is None:
 			return None
-		return binaryview.BinaryView(file_metadata=self, handle=view)
+		return binaryview.BinaryView._from_cache_or_new(file_metadata=self, handle=view)
 
 	@property
 	def database(self) -> Optional['database.Database']:
@@ -632,7 +632,7 @@ class FileMetadata:
 			view = core.BNCreateBinaryViewOfType(view_type, self.raw.handle)
 			if view is None:
 				return None
-		return binaryview.BinaryView(file_metadata=self, handle=view)
+		return binaryview.BinaryView._from_cache_or_new(file_metadata=self, handle=view)
 
 
 	@property

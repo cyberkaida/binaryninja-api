@@ -123,7 +123,7 @@ class PluginCommand(metaclass=_PluginCommandMetaClass):
 	def _default_action(view, action):
 		try:
 			file_metadata = filemetadata.FileMetadata(handle=core.BNGetFileForView(view))
-			view_obj = binaryview.BinaryView(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
+			view_obj = binaryview.BinaryView._from_cache_or_new(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
 			action(view_obj)
 		except:
 			log_error(traceback.format_exc())
@@ -132,7 +132,7 @@ class PluginCommand(metaclass=_PluginCommandMetaClass):
 	def _address_action(view, addr, action):
 		try:
 			file_metadata = filemetadata.FileMetadata(handle=core.BNGetFileForView(view))
-			view_obj = binaryview.BinaryView(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
+			view_obj = binaryview.BinaryView._from_cache_or_new(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
 			action(view_obj, addr)
 		except:
 			log_error(traceback.format_exc())
@@ -141,7 +141,7 @@ class PluginCommand(metaclass=_PluginCommandMetaClass):
 	def _range_action(view, addr, length, action):
 		try:
 			file_metadata = filemetadata.FileMetadata(handle=core.BNGetFileForView(view))
-			view_obj = binaryview.BinaryView(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
+			view_obj = binaryview.BinaryView._from_cache_or_new(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
 			action(view_obj, addr, length)
 		except:
 			log_error(traceback.format_exc())
@@ -150,7 +150,7 @@ class PluginCommand(metaclass=_PluginCommandMetaClass):
 	def _function_action(view, func, action):
 		try:
 			file_metadata = filemetadata.FileMetadata(handle=core.BNGetFileForView(view))
-			view_obj = binaryview.BinaryView(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
+			view_obj = binaryview.BinaryView._from_cache_or_new(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
 			func_obj = function.Function(view_obj, core.BNNewFunctionReference(func))
 			action(view_obj, func_obj)
 		except:
@@ -160,7 +160,7 @@ class PluginCommand(metaclass=_PluginCommandMetaClass):
 	def _low_level_il_function_action(view, func, action):
 		try:
 			file_metadata = filemetadata.FileMetadata(handle=core.BNGetFileForView(view))
-			view_obj = binaryview.BinaryView(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
+			view_obj = binaryview.BinaryView._from_cache_or_new(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
 			owner = function.Function(view_obj, core.BNGetLowLevelILOwnerFunction(func))
 			func_obj = lowlevelil.LowLevelILFunction(owner.arch, core.BNNewLowLevelILFunctionReference(func), owner)
 			action(view_obj, func_obj)
@@ -171,7 +171,7 @@ class PluginCommand(metaclass=_PluginCommandMetaClass):
 	def _low_level_il_instruction_action(view, func, instr, action):
 		try:
 			file_metadata = filemetadata.FileMetadata(handle=core.BNGetFileForView(view))
-			view_obj = binaryview.BinaryView(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
+			view_obj = binaryview.BinaryView._from_cache_or_new(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
 			owner = function.Function(view_obj, core.BNGetLowLevelILOwnerFunction(func))
 			func_obj = lowlevelil.LowLevelILFunction(owner.arch, core.BNNewLowLevelILFunctionReference(func), owner)
 			action(view_obj, func_obj[instr])
@@ -182,7 +182,7 @@ class PluginCommand(metaclass=_PluginCommandMetaClass):
 	def _medium_level_il_function_action(view, func, action):
 		try:
 			file_metadata = filemetadata.FileMetadata(handle=core.BNGetFileForView(view))
-			view_obj = binaryview.BinaryView(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
+			view_obj = binaryview.BinaryView._from_cache_or_new(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
 			owner = function.Function(view_obj, core.BNGetMediumLevelILOwnerFunction(func))
 			func_obj = mediumlevelil.MediumLevelILFunction(
 			    owner.arch, core.BNNewMediumLevelILFunctionReference(func), owner
@@ -195,7 +195,7 @@ class PluginCommand(metaclass=_PluginCommandMetaClass):
 	def _medium_level_il_instruction_action(view, func, instr, action):
 		try:
 			file_metadata = filemetadata.FileMetadata(handle=core.BNGetFileForView(view))
-			view_obj = binaryview.BinaryView(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
+			view_obj = binaryview.BinaryView._from_cache_or_new(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
 			owner = function.Function(view_obj, core.BNGetMediumLevelILOwnerFunction(func))
 			func_obj = mediumlevelil.MediumLevelILFunction(
 			    owner.arch, core.BNNewMediumLevelILFunctionReference(func), owner
@@ -208,7 +208,7 @@ class PluginCommand(metaclass=_PluginCommandMetaClass):
 	def _high_level_il_function_action(view, func, action):
 		try:
 			file_metadata = filemetadata.FileMetadata(handle=core.BNGetFileForView(view))
-			view_obj = binaryview.BinaryView(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
+			view_obj = binaryview.BinaryView._from_cache_or_new(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
 			owner = function.Function(view_obj, core.BNGetHighLevelILOwnerFunction(func))
 			func_obj = highlevelil.HighLevelILFunction(owner.arch, core.BNNewHighLevelILFunctionReference(func), owner)
 			action(view_obj, func_obj)
@@ -219,7 +219,7 @@ class PluginCommand(metaclass=_PluginCommandMetaClass):
 	def _high_level_il_instruction_action(view, func, instr, action):
 		try:
 			file_metadata = filemetadata.FileMetadata(handle=core.BNGetFileForView(view))
-			view_obj = binaryview.BinaryView(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
+			view_obj = binaryview.BinaryView._from_cache_or_new(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
 			owner = function.Function(view_obj, core.BNGetHighLevelILOwnerFunction(func))
 			func_obj = highlevelil.HighLevelILFunction(owner.arch, core.BNNewHighLevelILFunctionReference(func), owner)
 			action(view_obj, func_obj[instr])
@@ -232,7 +232,7 @@ class PluginCommand(metaclass=_PluginCommandMetaClass):
 			if is_valid is None:
 				return True
 			file_metadata = filemetadata.FileMetadata(handle=core.BNGetFileForView(view))
-			view_obj = binaryview.BinaryView(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
+			view_obj = binaryview.BinaryView._from_cache_or_new(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
 			return is_valid(view_obj)
 		except:
 			log_error(traceback.format_exc())
@@ -244,7 +244,7 @@ class PluginCommand(metaclass=_PluginCommandMetaClass):
 			if is_valid is None:
 				return True
 			file_metadata = filemetadata.FileMetadata(handle=core.BNGetFileForView(view))
-			view_obj = binaryview.BinaryView(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
+			view_obj = binaryview.BinaryView._from_cache_or_new(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
 			return is_valid(view_obj, addr)
 		except:
 			log_error(traceback.format_exc())
@@ -256,7 +256,7 @@ class PluginCommand(metaclass=_PluginCommandMetaClass):
 			if is_valid is None:
 				return True
 			file_metadata = filemetadata.FileMetadata(handle=core.BNGetFileForView(view))
-			view_obj = binaryview.BinaryView(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
+			view_obj = binaryview.BinaryView._from_cache_or_new(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
 			return is_valid(view_obj, addr, length)
 		except:
 			log_error(traceback.format_exc())
@@ -268,7 +268,7 @@ class PluginCommand(metaclass=_PluginCommandMetaClass):
 			if is_valid is None:
 				return True
 			file_metadata = filemetadata.FileMetadata(handle=core.BNGetFileForView(view))
-			view_obj = binaryview.BinaryView(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
+			view_obj = binaryview.BinaryView._from_cache_or_new(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
 			func_obj = function.Function(view_obj, core.BNNewFunctionReference(func))
 			return is_valid(view_obj, func_obj)
 		except:
@@ -281,7 +281,7 @@ class PluginCommand(metaclass=_PluginCommandMetaClass):
 			if is_valid is None:
 				return True
 			file_metadata = filemetadata.FileMetadata(handle=core.BNGetFileForView(view))
-			view_obj = binaryview.BinaryView(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
+			view_obj = binaryview.BinaryView._from_cache_or_new(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
 			owner = function.Function(view_obj, core.BNGetLowLevelILOwnerFunction(func))
 			func_obj = lowlevelil.LowLevelILFunction(owner.arch, core.BNNewLowLevelILFunctionReference(func), owner)
 			return is_valid(view_obj, func_obj)
@@ -295,7 +295,7 @@ class PluginCommand(metaclass=_PluginCommandMetaClass):
 			if is_valid is None:
 				return True
 			file_metadata = filemetadata.FileMetadata(handle=core.BNGetFileForView(view))
-			view_obj = binaryview.BinaryView(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
+			view_obj = binaryview.BinaryView._from_cache_or_new(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
 			owner = function.Function(view_obj, core.BNGetLowLevelILOwnerFunction(func))
 			func_obj = lowlevelil.LowLevelILFunction(owner.arch, core.BNNewLowLevelILFunctionReference(func), owner)
 			return is_valid(view_obj, func_obj[instr])
@@ -309,7 +309,7 @@ class PluginCommand(metaclass=_PluginCommandMetaClass):
 			if is_valid is None:
 				return True
 			file_metadata = filemetadata.FileMetadata(handle=core.BNGetFileForView(view))
-			view_obj = binaryview.BinaryView(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
+			view_obj = binaryview.BinaryView._from_cache_or_new(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
 			owner = function.Function(view_obj, core.BNGetMediumLevelILOwnerFunction(func))
 			func_obj = mediumlevelil.MediumLevelILFunction(
 			    owner.arch, core.BNNewMediumLevelILFunctionReference(func), owner
@@ -325,7 +325,7 @@ class PluginCommand(metaclass=_PluginCommandMetaClass):
 			if is_valid is None:
 				return True
 			file_metadata = filemetadata.FileMetadata(handle=core.BNGetFileForView(view))
-			view_obj = binaryview.BinaryView(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
+			view_obj = binaryview.BinaryView._from_cache_or_new(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
 			owner = function.Function(view_obj, core.BNGetMediumLevelILOwnerFunction(func))
 			func_obj = mediumlevelil.MediumLevelILFunction(
 			    owner.arch, core.BNNewMediumLevelILFunctionReference(func), owner
@@ -341,7 +341,7 @@ class PluginCommand(metaclass=_PluginCommandMetaClass):
 			if is_valid is None:
 				return True
 			file_metadata = filemetadata.FileMetadata(handle=core.BNGetFileForView(view))
-			view_obj = binaryview.BinaryView(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
+			view_obj = binaryview.BinaryView._from_cache_or_new(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
 			owner = function.Function(view_obj, core.BNGetHighLevelILOwnerFunction(func))
 			func_obj = highlevelil.HighLevelILFunction(owner.arch, core.BNNewHighLevelILFunctionReference(func), owner)
 			return is_valid(view_obj, func_obj)
@@ -355,7 +355,7 @@ class PluginCommand(metaclass=_PluginCommandMetaClass):
 			if is_valid is None:
 				return True
 			file_metadata = filemetadata.FileMetadata(handle=core.BNGetFileForView(view))
-			view_obj = binaryview.BinaryView(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
+			view_obj = binaryview.BinaryView._from_cache_or_new(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
 			owner = function.Function(view_obj, core.BNGetHighLevelILOwnerFunction(func))
 			func_obj = highlevelil.HighLevelILFunction(owner.arch, core.BNNewHighLevelILFunctionReference(func), owner)
 			return is_valid(view_obj, func_obj[instr])

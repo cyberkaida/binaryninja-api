@@ -172,7 +172,7 @@ class Component:
     def view(self):
         bn_binaryview = core.BNComponentGetView(self.handle)
         if bn_binaryview is not None:
-            return binaryview.BinaryView(handle=bn_binaryview)
+            return binaryview.BinaryView._from_cache_or_new(handle=bn_binaryview)
         return None
 
     @property

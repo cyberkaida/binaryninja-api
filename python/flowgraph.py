@@ -161,7 +161,7 @@ class FlowGraphNode:
 			core.BNFreeBasicBlock(block)
 			return None
 
-		view = binaryview.BinaryView(handle=core.BNGetFunctionData(func_handle))
+		view = binaryview.BinaryView._from_cache_or_new(handle=core.BNGetFunctionData(func_handle))
 		func = function.Function(view, func_handle)
 
 		if core.BNIsLowLevelILBasicBlock(block):
@@ -585,7 +585,7 @@ class FlowGraph:
 		view = core.BNGetViewForFlowGraph(self.handle)
 		if view is None:
 			return None
-		return binaryview.BinaryView(handle=view)
+		return binaryview.BinaryView._from_cache_or_new(handle=view)
 
 	@view.setter
 	def view(self, view):

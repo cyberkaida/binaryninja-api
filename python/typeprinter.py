@@ -251,7 +251,7 @@ class TypePrinter(metaclass=_TypePrinterMetaclass):
 
 			result_py = self.print_all_types(
 				types_py,
-				binaryview.BinaryView(handle=core.BNNewViewReference(data)),
+				binaryview.BinaryView._from_cache_or_new(handle=core.BNNewViewReference(data)),
 				padding_cols, escaping)
 
 			TypePrinter._cached_string = core.cstr(result_py)

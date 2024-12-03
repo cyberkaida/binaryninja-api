@@ -60,7 +60,7 @@ class AnalysisContext:
 		result = core.BNAnalysisContextGetBinaryView(self.handle)
 		if not result:
 			return None
-		return binaryview.BinaryView(handle=result)
+		return binaryview.BinaryView._from_cache_or_new(handle=result)
 
 	@property
 	def function(self) -> '_function.Function':

@@ -203,7 +203,7 @@ class ScriptingInstance:
 	def _set_current_binary_view(self, ctxt, view):
 		try:
 			if view:
-				view = binaryview.BinaryView(handle=core.BNNewViewReference(view))
+				view = binaryview.BinaryView._from_cache_or_new(handle=core.BNNewViewReference(view))
 				binaryview.BinaryView._cache_insert(view)
 			else:
 				view = None
@@ -231,7 +231,7 @@ class ScriptingInstance:
 					core_block = core.BNNewBasicBlockReference(block)
 					assert core_block is not None, "core.BNNewBasicBlockReference returned None"
 					block = basicblock.BasicBlock(
-					    core_block, binaryview.BinaryView(handle=core.BNGetFunctionData(func))
+					    core_block, binaryview.BinaryView._from_cache_or_new(handle=core.BNGetFunctionData(func))
 					)
 					core.BNFreeFunction(func)
 			else:

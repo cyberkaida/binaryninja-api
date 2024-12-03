@@ -118,7 +118,7 @@ class DataRenderer:
 	def _is_valid_for_data(self, ctxt, view, addr, type, context, ctxCount):
 		try:
 			file_metadata = filemetadata.FileMetadata(handle=core.BNGetFileForView(view))
-			view = binaryview.BinaryView(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
+			view = binaryview.BinaryView._from_cache_or_new(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
 			type = types.Type.create(handle=core.BNNewTypeReference(type))
 			pycontext = []
 			for i in range(0, ctxCount):
@@ -133,7 +133,7 @@ class DataRenderer:
 	def _get_lines_for_data(self, ctxt, view, addr, type, prefix, prefixCount, width, count, typeCtx, ctxCount, language):
 		try:
 			file_metadata = filemetadata.FileMetadata(handle=core.BNGetFileForView(view))
-			view = binaryview.BinaryView(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
+			view = binaryview.BinaryView._from_cache_or_new(file_metadata=file_metadata, handle=core.BNNewViewReference(view))
 			type = types.Type.create(handle=core.BNNewTypeReference(type))
 
 			prefixTokens = function.InstructionTextToken._from_core_struct(prefix, prefixCount)

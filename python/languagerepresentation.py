@@ -646,7 +646,7 @@ class LanguageRepresentationFunctionType(metaclass=_LanguageRepresentationFuncti
 
 	def _is_valid(self, ctxt, view: core.BNBinaryViewHandle) -> bool:
 		try:
-			view = binaryview.BinaryView(handle=core.BNNewViewReference(view))
+			view = binaryview.BinaryView._from_cache_or_new(handle=core.BNNewViewReference(view))
 			return self.is_valid(view)
 		except:
 			log_error(traceback.format_exc())

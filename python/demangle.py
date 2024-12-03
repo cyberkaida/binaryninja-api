@@ -377,7 +377,7 @@ class Demangler(metaclass=_DemanglerMetaclass):
 			api_arch = CoreArchitecture._from_cache(arch)
 			api_view = None
 			if view is not None:
-				api_view = binaryview.BinaryView(handle=core.BNNewViewReference(view))
+				api_view = binaryview.BinaryView._from_cache_or_new(handle=core.BNNewViewReference(view))
 
 			result = self.demangle(api_arch, core.pyNativeStr(name), api_view)
 			if result is None:

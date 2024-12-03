@@ -508,7 +508,7 @@ class InteractionHandler:
 	def _show_plain_text_report(self, ctxt, view, title, contents):
 		try:
 			if view:
-				view = binaryview.BinaryView(handle=core.BNNewViewReference(view))
+				view = binaryview.BinaryView._from_cache_or_new(handle=core.BNNewViewReference(view))
 			else:
 				view = None
 			self.show_plain_text_report(view, title, contents)
@@ -518,7 +518,7 @@ class InteractionHandler:
 	def _show_markdown_report(self, ctxt, view, title, contents, plaintext):
 		try:
 			if view:
-				view = binaryview.BinaryView(handle=core.BNNewViewReference(view))
+				view = binaryview.BinaryView._from_cache_or_new(handle=core.BNNewViewReference(view))
 			else:
 				view = None
 			self.show_markdown_report(view, title, contents, plaintext)
@@ -528,7 +528,7 @@ class InteractionHandler:
 	def _show_html_report(self, ctxt, view, title, contents, plaintext):
 		try:
 			if view:
-				view = binaryview.BinaryView(handle=core.BNNewViewReference(view))
+				view = binaryview.BinaryView._from_cache_or_new(handle=core.BNNewViewReference(view))
 			else:
 				view = None
 			self.show_html_report(view, title, contents, plaintext)
@@ -538,7 +538,7 @@ class InteractionHandler:
 	def _show_graph_report(self, ctxt, view, title, graph):
 		try:
 			if view:
-				view = binaryview.BinaryView(handle=core.BNNewViewReference(view))
+				view = binaryview.BinaryView._from_cache_or_new(handle=core.BNNewViewReference(view))
 			else:
 				view = None
 			self.show_graph_report(view, title, flowgraph.CoreFlowGraph(core.BNNewFlowGraphReference(graph)))
@@ -574,7 +574,7 @@ class InteractionHandler:
 	def _get_address_input(self, ctxt, result, prompt, title, view, current_address):
 		try:
 			if view:
-				view = binaryview.BinaryView(handle=core.BNNewViewReference(view))
+				view = binaryview.BinaryView._from_cache_or_new(handle=core.BNNewViewReference(view))
 			else:
 				view = None
 			value = self.get_address_input(prompt, title, view, current_address)
@@ -668,7 +668,7 @@ class InteractionHandler:
 				elif fields[i].type == FormInputFieldType.AddressFormField:
 					view = None
 					if fields[i].view:
-						view = binaryview.BinaryView(handle=core.BNNewViewReference(fields[i].view))
+						view = binaryview.BinaryView._from_cache_or_new(handle=core.BNNewViewReference(fields[i].view))
 					field_objs.append(
 					    AddressField(
 					        fields[i].prompt, view, fields[i].currentAddress,
@@ -979,7 +979,7 @@ class ReportCollection:
 		title = core.BNGetReportTitle(self.handle, i)
 		view = core.BNGetReportView(self.handle, i)
 		if view:
-			view = binaryview.BinaryView(handle=view)
+			view = binaryview.BinaryView._from_cache_or_new(handle=view)
 		else:
 			view = None
 		if report_type == ReportType.PlainTextReportType:
