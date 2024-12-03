@@ -4180,22 +4180,24 @@ bool GetLowLevelILForArmInstruction(Architecture* arch, uint64_t addr, LowLevelI
 										il.Unimplemented()
 									)
 								);
+								il.AddInstruction(il.SetRegister(4, LLIL_TEMP(0),
+									il.Add(4,
+										il.Register(4, LLIL_TEMP(0)),
+										il.Const(1, 4)
+									)
+								));
 							}
 							else
 							{
 								il.AddInstruction(
 									il.Store(4,
-										il.Register(4, LLIL_TEMP(0)),
+										il.Add(4,
+											il.Register(4, LLIL_TEMP(0)),
+											il.Const(4, get_register_size((enum Register)j) * j)),
 										il.Register(get_register_size((enum Register)j), j)
 									)
 								);
 							}
-							il.AddInstruction(il.SetRegister(4, LLIL_TEMP(0),
-								il.Add(4,
-									il.Register(4, LLIL_TEMP(0)),
-									il.Const(1, 4)
-								)
-							));
 						}
 					}
 					// Check if PC is stored
