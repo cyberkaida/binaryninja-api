@@ -3514,9 +3514,20 @@ extern "C"
 		WriteMemoryAccessType,
 	} BNFirmwareNinjaMemoryAccessType;
 
+	typedef enum BNFirmwareNinjaMemoryLocationType
+	{
+		NoMemoryLocationType,
+		ParameterMemoryLocationType,
+		StaticMemoryLocationType,
+		HeapMemoryLocationType,
+		StackMemoryLocationType,
+		UnknownMemoryLocationType,
+	} BNFirmwareNinjaMemoryLocationType;
+
 	typedef struct BNFirmwareNinjaMemoryAccess
 	{
 		uint64_t instrAddress;
+		BNFirmwareNinjaMemoryLocationType locationType;
 		BNRegisterValue memAddress;
 		BNFirmwareNinjaMemoryHeuristic heuristic;
 		BNFirmwareNinjaMemoryAccessType type;
@@ -3536,7 +3547,6 @@ extern "C"
 		size_t total;
 		size_t unique;
 	} BNFirmwareNinjaDeviceAccesses;
-
 
 	BINARYNINJACOREAPI char* BNAllocString(const char* contents);
 	BINARYNINJACOREAPI void BNFreeString(char* str);
@@ -8048,6 +8058,7 @@ extern "C"
 	BINARYNINJACOREAPI int BNFirmwareNinjaQueryFunctionMemoryAccessesFromMetadata(BNFirmwareNinja* fn, BNFirmwareNinjaFunctionMemoryAccesses*** mmio);
 	BINARYNINJACOREAPI int BNFirmwareNinjaGetBoardDeviceAccesses(BNFirmwareNinja* fn, BNFirmwareNinjaFunctionMemoryAccesses** mmio, int size, BNFirmwareNinjaDeviceAccesses** accesses, BNArchitecture* arch);
 	BINARYNINJACOREAPI void BNFirmwareNinjaFreeBoardDeviceAccesses(BNFirmwareNinjaDeviceAccesses *accesses, int size);
+	BINARYNINJACOREAPI BNComponent** BNFirmwareNinjaIdentifyExternalRelationships(BNFirmwareNinja* fn, BNFunction* scope, BNProjectFile* externalFile, size_t* count, BNProgressFunction progress, void* progressContext);
 #ifdef __cplusplus
 }
 #endif

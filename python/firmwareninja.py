@@ -21,7 +21,7 @@
 
 import ctypes
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, Optional
 from .binaryview import BinaryView
 from .variable import RegisterValue
 from .enums import (
@@ -31,6 +31,8 @@ from .enums import (
     FirmwareNinjaSectionType,
 )
 from .function import Function
+from .component import Component
+from .project import ProjectFile
 from . import _binaryninjacore as core
 
 
@@ -466,3 +468,42 @@ class FirmwareNinja:
             return device_accesses_list
         finally:
             core.BNFirmwareNinjaFreeBoardDeviceAccesses(device_accesses, count)
+
+    def identify_external_relationships(
+        self, scope: Optional[Function], backing_file: ProjectFile, progress_func: Callable = None
+    ) -> list[Component]:
+        """
+        ``identify_external_relationships`` identifies external relationships between functions in binaries
+
+        :param Function scope: optional internal function to limit the scope of the analysis
+        :param ProjectFile backing_file: external binary ninja database file to run the analysis on
+        :param callback progress_func: optional function to be called with the current progress and total count.
+        :return: List of component objects containing information on external relationships
+        :rtype: list[Component]
+        """
+
+        if progress_func is None:
+            progress_cfunc = ctypes.CFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_ulonglong, ctypes.c_ulonglong)(
+                lambda ctxt, cur, total: True
+            )
+        else:
+            progress_cfunc = ctypes.CFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_ulonglong, ctypes.c_ulonglong)(
+                lambda ctxt, cur, total: progress_func(cur, total)
+            )
+
+        count = ctypes.c_ulonglong(0)
+        scope_handle = None
+        if scope is not None:
+            scope_handle = scope._handle
+
+        components = []
+        try:
+            bn_components = core.BNFirmwareNinjaIdentifyExternalRelationships(
+                self._handle, scope_handle, backing_file._handle, count, progress_cfunc, None
+            )
+            for i in range(count.value):
+                components.append(Component(core.BNNewComponentReference(bn_components[i])))
+        finally:
+            core.BNFreeComponents(bn_components, count)
+
+        return components
