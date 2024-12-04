@@ -114,7 +114,7 @@ std::optional<CompleteObjectLocator> ReadCompleteObjectorLocator(BinaryView *vie
 
 Ref<Type> GetPMDType(BinaryView *view)
 {
-    auto typeId = Type::GenerateAutoTypeId("msvc_rtti", QualifiedName("PMD"));
+    auto typeId = Type::GenerateAutoTypeId(TYPE_SOURCE_MICROSOFT, QualifiedName("PMD"));
     Ref<Type> typeCache = view->GetTypeById(typeId);
 
     if (typeCache == nullptr)
@@ -138,7 +138,7 @@ Ref<Type> ClassHierarchyDescriptorType(BinaryView *view, BNPointerBaseType ptrBa
 
 Ref<Type> BaseClassDescriptorType(BinaryView *view, BNPointerBaseType ptrBaseTy)
 {
-    auto typeId = Type::GenerateAutoTypeId("msvc_rtti", QualifiedName("RTTIBaseClassDescriptor"));
+    auto typeId = Type::GenerateAutoTypeId(TYPE_SOURCE_MICROSOFT, QualifiedName("RTTIBaseClassDescriptor"));
     Ref<Type> typeCache = view->GetTypeById(typeId);
 
     if (typeCache == nullptr)
@@ -182,7 +182,7 @@ Ref<Type> BaseClassArrayType(BinaryView *view, const uint64_t length, BNPointerB
 
 Ref<Type> ClassHierarchyDescriptorType(BinaryView *view, BNPointerBaseType ptrBaseTy)
 {
-    auto typeId = Type::GenerateAutoTypeId("msvc_rtti", QualifiedName("RTTIClassHierarchyDescriptor"));
+    auto typeId = Type::GenerateAutoTypeId(TYPE_SOURCE_MICROSOFT, QualifiedName("RTTIClassHierarchyDescriptor"));
     Ref<Type> typeCache = view->GetTypeById(typeId);
 
     if (typeCache == nullptr)
@@ -210,7 +210,7 @@ Ref<Type> ClassHierarchyDescriptorType(BinaryView *view, BNPointerBaseType ptrBa
 
 Ref<Type> CompleteObjectLocator64Type(BinaryView *view)
 {
-    auto typeId = Type::GenerateAutoTypeId("msvc_rtti", QualifiedName("RTTICompleteObjectLocator64"));
+    auto typeId = Type::GenerateAutoTypeId(TYPE_SOURCE_MICROSOFT, QualifiedName("RTTICompleteObjectLocator64"));
     Ref<Type> typeCache = view->GetTypeById(typeId);
 
     if (typeCache == nullptr)
@@ -253,7 +253,7 @@ Ref<Type> CompleteObjectLocator64Type(BinaryView *view)
 
 Ref<Type> CompleteObjectLocator32Type(BinaryView *view)
 {
-    auto typeId = Type::GenerateAutoTypeId("msvc_rtti", QualifiedName("RTTICompleteObjectLocator32"));
+    auto typeId = Type::GenerateAutoTypeId(TYPE_SOURCE_MICROSOFT, QualifiedName("RTTICompleteObjectLocator32"));
     Ref<Type> typeCache = view->GetTypeById(typeId);
 
     if (typeCache == nullptr)
@@ -300,35 +300,6 @@ Ref<Type> TypeDescriptorType(BinaryView *view, uint64_t length)
 }
 
 
-Ref<Metadata> MicrosoftRTTIProcessor::SerializedMetadata()
-{
-    std::map<std::string, Ref<Metadata> > classesMeta;
-    for (auto &[coLocatorAddr, classInfo]: m_classInfo)
-    {
-        auto addrStr = std::to_string(coLocatorAddr);
-        classesMeta[addrStr] = classInfo.SerializedMetadata();
-    }
-
-    std::map<std::string, Ref<Metadata> > msvcMeta;
-    msvcMeta["classes"] = new Metadata(classesMeta);
-    return new Metadata(msvcMeta);
-}
-
-
-void MicrosoftRTTIProcessor::DeserializedMetadata(const Ref<Metadata> &metadata)
-{
-    std::map<std::string, Ref<Metadata> > msvcMeta = metadata->GetKeyValueStore();
-    if (msvcMeta.find("classes") != msvcMeta.end())
-    {
-        for (auto &[coLocatorAddrStr, classInfoMeta]: msvcMeta["classes"]->GetKeyValueStore())
-        {
-            uint64_t coLocatorAddr = std::stoull(coLocatorAddrStr);
-            m_classInfo[coLocatorAddr] = ClassInfo::DeserializedMetadata(classInfoMeta);
-        }
-    }
-}
-
-
 std::optional<ClassInfo> MicrosoftRTTIProcessor::ProcessRTTI(uint64_t coLocatorAddr)
 {
     // Get complete object locator then check to see if its valid.
@@ -350,7 +321,7 @@ std::optional<ClassInfo> MicrosoftRTTIProcessor::ProcessRTTI(uint64_t coLocatorA
     if (!className.has_value())
         return std::nullopt;
 
-    auto classInfo = ClassInfo{className.value()};
+    auto classInfo = ClassInfo{RTTIProcessorType::Microsoft, className.value()};
     if (coLocator->offset > 0)
         classInfo.classOffset = coLocator->offset;
 
@@ -412,7 +383,7 @@ std::optional<ClassInfo> MicrosoftRTTIProcessor::ProcessRTTI(uint64_t coLocatorA
 }
 
 
-std::optional<VirtualFunctionTableInfo> MicrosoftRTTIProcessor::ProcessVFT(uint64_t vftAddr, const ClassInfo &classInfo)
+std::optional<VirtualFunctionTableInfo> MicrosoftRTTIProcessor::ProcessVFT(uint64_t vftAddr, ClassInfo &classInfo)
 {
     VirtualFunctionTableInfo vftInfo = {vftAddr};
     // Gather all virtual functions
@@ -525,8 +496,9 @@ std::optional<VirtualFunctionTableInfo> MicrosoftRTTIProcessor::ProcessVFT(uint6
 }
 
 
-MicrosoftRTTIProcessor::MicrosoftRTTIProcessor(const Ref<BinaryView> &view, bool useMangled, bool checkRData, bool vftSweep) : m_view(view)
+MicrosoftRTTIProcessor::MicrosoftRTTIProcessor(const Ref<BinaryView> &view, bool useMangled, bool checkRData, bool vftSweep)
 {
+    m_view = view;
     m_logger = new Logger("Microsoft RTTI");
     allowMangledClassNames = useMangled;
     checkWritableRData = checkRData;
@@ -536,7 +508,7 @@ MicrosoftRTTIProcessor::MicrosoftRTTIProcessor(const Ref<BinaryView> &view, bool
     if (metadata != nullptr)
     {
         // Load in metadata to the processor.
-        DeserializedMetadata(metadata);
+        DeserializedMetadata(RTTIProcessorType::Microsoft, metadata);
     }
 }
 
@@ -663,7 +635,7 @@ void MicrosoftRTTIProcessor::ProcessVFT()
         }
     }
 
-    auto GetCachedVFTInfo = [&](uint64_t vftAddr, const ClassInfo& classInfo) {
+    auto GetCachedVFTInfo = [&](uint64_t vftAddr, ClassInfo& classInfo) {
         // Check in the cache so that we don't process vfts more than once.
         auto cachedVftInfo = vftFinishedMap.find(vftAddr);
         if (cachedVftInfo != vftFinishedMap.end())
@@ -694,9 +666,9 @@ void MicrosoftRTTIProcessor::ProcessVFT()
         }
 
         if (auto vftInfo = GetCachedVFTInfo(vftAddr, classInfo))
-        {
             classInfo.vft = vftInfo.value();
-        }
+
+        m_classInfo[coLocatorAddr] = classInfo;
     }
 
     auto end_time = std::chrono::high_resolution_clock::now();
