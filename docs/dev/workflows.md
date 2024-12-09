@@ -16,6 +16,8 @@ By leveraging Workflows, you gain unparalleled control over the decompilation an
 
 ## Concepts
 
+![Workflow Concepts Diagram](../img/workflow-concepts-diagram.png "Workflow Concepts"){ width="800" }
+
 ### Workflow
 
 A **Workflow** in Binary Ninja defines the set of analyses to perform on a binary, including their dependencies and execution order. Workflows are represented as Directed Acyclic Graphs (DAGs), where each node corresponds to an **Activity** (an individual analysis or action). We have built an API around modifying and extending this structure, enabling you to tailor the decompilation and analysis process to your specific needs.
@@ -519,7 +521,7 @@ The **Workflow Machine** is the core engine that manages and executes workflows.
 There is an API to interact directly with the Workflow Machine, allowing you to issue commands, query state, and control activity eligibility.
 
 !!! note
-	This API is only available in **Commercial** and above product editions.
+	This API is only available in **Commercial** and above product editions. However, the Workflow Machine API is not required for the general use case of authoring or using workflows.
 
 ### WorkflowMachine CLI Commands
 

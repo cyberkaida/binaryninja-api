@@ -64,7 +64,11 @@ impl Matcher {
         // Get core signatures for the given platform
         let install_dir = binaryninja::install_directory().unwrap();
         #[cfg(target_os = "macos")]
-        let root_core_sig_dir = install_dir.parent().unwrap().join("Resources").join("signatures");
+        let root_core_sig_dir = install_dir
+            .parent()
+            .unwrap()
+            .join("Resources")
+            .join("signatures");
         #[cfg(not(target_os = "macos"))]
         let root_core_sig_dir = install_dir.join("signatures");
         let plat_core_sig_dir = root_core_sig_dir.join(&platform_name);
@@ -411,7 +415,7 @@ impl MatcherSettings {
             "title" : "Trivial Function Length",
             "type" : "number",
             "default" : Self::TRIVIAL_FUNCTION_LEN_DEFAULT,
-            "description" : "Functions below this length will be required to match on constraints.",
+            "description" : "Functions below this length in bytes will be required to match on constraints.",
             "ignore" : ["SettingsProjectScope", "SettingsResourceScope"]
         });
         bn_settings.register_setting_json(
