@@ -221,4 +221,5 @@ namespace SharedCacheAPI {
 	{
 		BNDSCFindSymbolAtAddressAndApplyToAddress(m_object, symbolLocation, targetLocation, triggerReanalysis);
 	}
+
 }	// namespace SharedCacheAPI
