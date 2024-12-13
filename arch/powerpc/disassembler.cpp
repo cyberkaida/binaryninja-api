@@ -321,9 +321,19 @@ powerpc_disassemble(struct decomp_result *res, char *buf, size_t len)
 	return rc;
 }
 
+const char* const gqr_array[] = {"gqr0", "gqr1", "gqr2", "gqr3", "gqr4", "gqr5", "gqr6", "gqr7"};
+
 extern "C" const char *
 powerpc_reg_to_str(uint32_t rid, int cs_mode_arg)
 {
+	if ((cs_mode_arg & CS_MODE_PS) != 0)
+	{
+		if ((rid >= PPC_REG_BN_GQR0) && (rid < PPC_REG_BN_ENDING))
+		{
+			return gqr_array[rid - PPC_REG_BN_GQR0];
+		}
+	}
+	
 	if(!handle_lil) {
 		powerpc_init(cs_mode_arg);
 	}
