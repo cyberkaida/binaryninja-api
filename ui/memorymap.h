@@ -104,6 +104,7 @@ class BINARYNINJAUIAPI SegmentWidget : public QWidget, public BinaryNinja::Binar
 		END,
 		DATA_OFFSET,
 		DATA_LENGTH,
+		SOURCE_TYPE,
 		FLAGS,
 		COLUMN_COUNT,
 	};
@@ -150,6 +151,7 @@ class BINARYNINJAUIAPI SectionWidget : public QWidget, public BinaryNinja::Binar
 		NAME = 0,
 		START,
 		END,
+		SOURCE_TYPE,
 		SEMANTICS,
 		COLUMN_COUNT,
 	};
