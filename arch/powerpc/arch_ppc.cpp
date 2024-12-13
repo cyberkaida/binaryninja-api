@@ -788,7 +788,7 @@ class PowerpcArchitecture: public Architecture
 			goto cleanup;
 		}
 
-getil:
+// getil:
 		rc = GetLowLevelILForPPCInstruction(this, il, data, addr, &res, endian == LittleEndian);
 		len = 4;
 
@@ -800,7 +800,6 @@ getil:
 		uint32_t flag, BNRegisterOrConstant* operands, size_t operandCount, LowLevelILFunction& il) override
 	{
 		// MYLOG("%s(), op:%d, flagwritetype:%d, flag:%d\n", __func__, op, flagWriteType, flag);
-		bool signedWrite = true;
 		ExprId left, right;
 		ppc_suf suf = (ppc_suf)0;
 

@@ -321,7 +321,7 @@ powerpc_disassemble(struct decomp_result *res, char *buf, size_t len)
 	return rc;
 }
 
-const char* const gqr_array[] = {"gqr0", "gqr1", "gqr2", "gqr3", "gqr4", "gqr5", "gqr6", "gqr7"};
+static const char* const gqr_array[] = {"gqr0", "gqr1", "gqr2", "gqr3", "gqr4", "gqr5", "gqr6", "gqr7"};
 
 extern "C" const char *
 powerpc_reg_to_str(uint32_t rid, int cs_mode_arg)
