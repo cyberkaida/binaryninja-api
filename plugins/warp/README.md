@@ -42,3 +42,12 @@ Example: `./sigem mylibrary.a` or `./sigem ./all-libs/`
 Once its finished you should see a `.sbin` file next to the input file, this can be moved into the corresponding signature folder (see the [user docs](https://docs.binary.ninja/dev/annotation.html?h=install+path#signature-library) for more info)
 
 If you encounter malloc errors or instability try and adjust the number of parallel threads using `RAYON_NUM_THREADS` environment variable (ex. `RAYON_NUM_THREADS=1 ./sigem mylib.a`)
+
+#### macOS
+
+If you are on macOS and the `sigem` binary fails to run due to missing `libbinaryninjacore.1.dylib`, you can set your [`DYLD_LIBRARY_PATH`](x-man-page://1/dyld) to include the `${DEP_BINARYNINJACORE_PATH}/Contents/MacOS/` directory.
+
+```sh
+export DYLD_LIBRARY_PATH="${DYLD_LIBRARY_PATH}:${DEP_BINARYNINJACORE_PATH}/Contents/MacOS/"
+./sigem --help
+```
