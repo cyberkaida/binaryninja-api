@@ -1,6 +1,7 @@
 #![allow(unused_imports)]
 use std::path::PathBuf;
 use std::process::Command;
+use std::path::Path;
 
 #[cfg(feature = "test")]
 fn compile_rust(file: PathBuf) -> bool {
@@ -18,9 +19,47 @@ fn compile_rust(file: PathBuf) -> bool {
 }
 
 fn main() {
-    if let Some(link_path) = option_env!("BINARYNINJADIR") {
+
+    let binja_base_dir: &str = option_env!("DEP_BINARYNINJACORE_BASE_DIR").unwrap_or_else(|| {
+        // If the environment variable is not set, try the default locations from
+        // https://docs.binary.ninja/guide/#binary-path
+
+        #[cfg(target_os = "macos")]
+        {
+            let default = "/Applications/Binary Ninja.app/";
+            if Path::new(default).exists() {
+                return default
+            }
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            let default = r"C:\Program Files\Vector35\BinaryNinja";
+            if Path::new(default).exists() {
+                return default
+            }
+            // Nothing at default path, check user path
+            if let Some(local_app_data) = std::env::var_os("LOCALAPPDATA") {
+                let user_path = Path::new(&local_app_data).join("Vector35").join("BinaryNinja");
+                if user_path.exists() {
+                    return user_path.to_str().unwrap()
+                }
+            }
+        }
+
+        panic!("DEP_BINARYNINJACORE_BASE_DIR must be set to the base directory of the Binary Ninja installation");
+    });
+
+    if let link_path = binja_base_dir {
         println!("cargo::rustc-link-lib=dylib=binaryninjacore");
         println!("cargo::rustc-link-search={}", link_path);
+
+        #[cfg(target_os = "macos")]
+        {
+            // On macOS the binaryninjacore dylib is in the MacOS directory
+            println!("cargo::rustc-link-search={}/Contents/MacOS", link_path);
+            println!("cargo::rustc-link-arg=-Wl,-rpath,{0}/Contents/MacOS,-L{0}/Contents/MacOS", link_path);
+        }
 
         #[cfg(not(target_os = "windows"))]
         {
